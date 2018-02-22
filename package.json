@@ -1,0 +1,24 @@
+{
+  "name": "trambar",
+  "version": "1.0.0",
+  "description": "",
+  "bin": "bin/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:chung-leong/trambar-cli.git"
+  },
+  "author": "Chung Leong",
+  "license": "MIT",
+  "homepage": "https://github.com/chung-leong/trambar",
+  "dependencies": {
+    "bcrypt": "^1.0.3",
+    "command-line-args": "^4.0.7",
+    "command-line-usage": "^4.0.1",
+    "is-root": "^1.0.0",
+    "lodash": "^4.17.5",
+    "readline-sync": "^1.4.9"
+  }
+}
