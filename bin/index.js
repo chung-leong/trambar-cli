@@ -1,15 +1,18 @@
 #!/usr/bin/env node
 
 var _ = require('lodash');
-var FS = require('fs');
+var FS = require('fs'); FS.mkdirpSync = require('mkdirp').sync;
 var Path = require('path');
 var ChildProcess = require('child_process');
+var Crypto = require('crypto');
+var Bcrypt = require('bcrypt');
 var CommandLineArgs = require('command-line-args');
 var CommandLineUsage = require('command-line-usage');
 var ReadlineSync = require('readline-sync');
 var IsRoot = require('is-root');
 
-var configFolder = `/etc/trambar`;
+var configFolder = '/etc/trambar';
+var defaultPassword = 'password';
 
 var optionDefinitions = [
     {
@@ -59,8 +62,8 @@ var scriptDescription = [
         content: [
             { name: 'compose', summary: 'Edit Trambar Docker Compose configuration file' },
             { name: 'env', summary: 'Edit Trambar environment variables' },
-            { name: 'password', summary: 'Set password of root account' },
             { name: 'install', summary: 'Download Docker images and create default configuration' },
+            { name: 'password', summary: 'Set password of root account' },
             { name: 'start', summary: 'Start Trambar' },
             { name: 'stop', summary: 'Stop Trambar' },
             { name: 'update', summary: 'Pull latest images and restart Trambar' },
@@ -75,67 +78,75 @@ var scriptDescription = [
     }
 ];
 
-try {
-    var options = CommandLineArgs(optionDefinitions);
-    var command = _.get(options, [ '*', 0 ]);
+var options = CommandLineArgs(optionDefinitions);
+var command = _.get(options, [ '*', 0 ]);
+if (command) {
+    if (!runCommand(command)) {
+        process.exit(-1);
+    }
+} else {
+    if (options.version) {
+        var version = getVersion();
+        console.log(`Trambar version ${version}`);
+    } else {
+        var usage = CommandLineUsage(scriptDescription);
+        console.log(usage);
+    }
+}
+process.exit(0);
+
+function runCommand(command) {
     switch (_.toLower(command)) {
         case 'compose':
-            editCompose();
-            break;
+            return editCompose();
         case 'env':
-            editEnv();
-            break;
+            return editEnv();
         case 'password':
-            setPassword();
-            break;
+            return setPassword();
         case 'install':
-            install();
-            break;
+            return install();
         case 'start':
-            start();
-            break;
+            return start();
         case 'stop':
-            stop();
-            break;
+            return stop();
         case 'update':
-            update();
-            break;
+            return update();
         case 'uninstall':
-            uninstall();
-            break;
+            return uninstall();
         default:
-            if (command) {
-                console.log(`Unknown command: ${command}`);
-            }
+            console.log(`Unknown command: ${command}`);
+            return false;
     }
-
-    if (!command) {
-        if (options.version) {
-            var version = getVersion();
-            console.log(version);
-        } if (options.help) {
-            var usage = CommandLineUsage(scriptDescription);
-            console.log(usage);
-        }
-        process.exit(0);
-    }
-} catch(err) {
-    console.log(err.message);
-    process.exit(-1);
 }
 
 function editCompose() {
+    if (!checkRootAccess()) {
+        return false;
+    }
     var path = `${configFolder}/docker-compose.yml`;
     editTextFile(path);
 }
 
 function editEnv() {
+    if (!checkRootAccess()) {
+        return false;
+    }
     var path = `${configFolder}/.env`;
     editTextFile(path);
 }
 
 function setPassword() {
-    console.log('set password');
+    if (!checkRootAccess()) {
+        return false;
+    }
+    if (!checkConfiguration()) {
+        return false;
+    }
+    var password = promptForPassword('Password:');
+    if (!savePassword(password)) {
+        return false;
+    }
+    return true;
 }
 
 function install() {
@@ -220,16 +231,6 @@ function uninstall() {
 }
 
 function editTextFile(path) {
-    if (!FS.existsSync(path)) {
-        console.warn(`File not found: ${path}`);
-        return false;
-    }
-    try {
-        FS.accessSync(folder, FS.constants.W_OK);
-    } catch (err) {
-        console.warn(`No write access: ${path}`);
-        return false
-    }
     var cmd = process.env.VISUAL || process.env.EDITOR || 'vi';
     var args = [ path ];
     return run(cmd, args);
@@ -269,6 +270,7 @@ function installDockerCompose() {
 
 function pullImages() {
     var imagesBefore = getImages();
+    process.chdir(configFolder);
     if (!run('docker-compose', [ 'pull' ])) {
         return false;
     }
@@ -291,10 +293,12 @@ function removeImages() {
 }
 
 function createContainers() {
+    process.chdir(configFolder);
     return run('docker-compose', [ '-p', 'trambar', 'up', '-d' ]);
 }
 
 function destroyContainers() {
+    process.chdir(configFolder);
     return run('docker-compose', [ '-p', 'trambar', 'down' ]);
 }
 
@@ -304,7 +308,7 @@ function confirm(question, def) {
         def = true;
     }
     if (options.yes) {
-        console.log(question + '\n');
+        console.log(question);
         return true;
     }
     do {
@@ -318,6 +322,23 @@ function confirm(question, def) {
         }
     } while(confirmed === undefined)
     return confirmed;
+}
+
+function promptForPassword(question, def) {
+    var password;
+    if (options.yes) {
+        console.log(question);
+        return def;
+    }
+    do {
+        var answer = _.trim(ReadlineSync.question(question + ' ', { hideEchoBack: true }));
+        if (!answer) {
+            password = def;
+        } else {
+            password = answer;
+        }
+    } while(password === undefined)
+    return password;
 }
 
 function isRunning() {
@@ -349,7 +370,21 @@ function checkDockerAccess() {
 }
 
 function checkConfiguration() {
+    if (!checkFileExistence(`${configFolder}/docker-compose.yml`)) {
+        return false;
+    }
+    if (!checkFileExistence(`${configFolder}/.env`)) {
+        return false;
+    }
+    return true;
+}
 
+function checkFileExistence(path) {
+    if (!FS.existsSync(path)) {
+        console.log(`File not found: ${path}`);
+        return false;
+    }
+    return true;
 }
 
 function getProcesses(options) {
@@ -406,6 +441,38 @@ function removeImage(id) {
     }
 }
 
+function createDefaultConfiguration() {
+    try {
+        FS.mkdirpSync(configFolder);
+        var dockerCompseYML = FS.readFileSync(`${__dirname}/docker-compose.yml`, 'utf-8');
+        var envTemplate = FS.readFileSync(`${__dirname}/env-template`, 'utf-8');
+        var envFunc = _.template(envTemplate);
+        var password = _.map([ 1, 2, 3, 4], () => {
+            return Crypto.randomBytes(16).toString('hex');
+        });
+        var env = envFunc({ password });
+        FS.writeFileSync(`${configFolder}/docker-compose.yml`, dockerCompseYML);
+        FS.writeFileSync(`${configFolder}/.env`, env);
+        FS.chmodSync(`${configFolder}/.env`, 0600);
+        var password = promptForPassword(`Password for root account [${defaultPassword}]:`, defaultPassword);
+        savePassword(password);
+        return true;
+    } catch(err) {
+        console.error(err.message);
+        return false;
+    }
+}
+
+function savePassword(password) {
+    if (!password) {
+        return false;
+    }
+    var hash = Bcrypt.hashSync(password, 10);
+    var text = `root:${hash}\n`;
+    FS.writeFileSync(`${configFolder}/trambar.htpasswd`, text);
+    return true;
+}
+
 function isInstalled(program) {
     var cmd = `${program} -v`;
     try {
@@ -433,4 +500,10 @@ function parseJSONList(text) {
         return JSON.parse(line);
     });
     return list;
+}
+
+function getVersion() {
+    var text = FS.readFileSync(`${__dirname}/../package.json`, 'utf-8');
+    var json = JSON.parse(text);
+    return _.get(json, 'version', 'unknown');
 }
