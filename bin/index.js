@@ -306,12 +306,16 @@ function installDocker() {
     if (isInstalled('apt-get')) {
         return run('apt-get -y install docker.io');
     } else if (isInstalled('pacman')) {
-        return run('pacman --noconfirm -S docker') && run('systemctl start docker');
+        return run('pacman --noconfirm -S docker')
+            && run('systemctl start docker');
     } else if (isInstalled('yum')) {
-
+        return run('yum -y install docker')
+            && run('systemctl start docker');
     } else if (isInstalled('urpmi')) {
-        return run('urpmi --auto docker') && run('systemctl start docker');
+        return run('urpmi --auto docker')
+            && run('systemctl start docker');
     } else {
+        console.log('Unable to find suitable package manager');
         return false;
     }
 }
@@ -328,10 +332,14 @@ function installDockerCompose() {
     } else if (isInstalled('pacman')) {
         return run('pacman --noconfirm -S docker-compose');
     } else if (isInstalled('yum')) {
-
+        return run('yum install epel-release')
+            && run('yum install -y python-pip')
+            && run('pip install docker-compose')
+            && run('yum upgrade python*');
     } else if (isInstalled('urpmi')) {
         return run('urpmi --auto docker-compose');
     } else {
+        console.log('Unable to find suitable package manager');
         return false;
     }
 }
