@@ -5,7 +5,7 @@ var FS = require('fs'); FS.mkdirpSync = require('mkdirp').sync;
 var Path = require('path');
 var ChildProcess = require('child_process');
 var Crypto = require('crypto');
-var Bcrypt = require('bcrypt');
+var BcryptJS = require('bcryptjs');
 var CommandLineArgs = require('command-line-args');
 var CommandLineUsage = require('command-line-usage');
 var ReadlineSync = require('readline-sync');
@@ -573,7 +573,9 @@ function savePassword(password) {
     if (!password) {
         return false;
     }
-    var hash = Bcrypt.hashSync(password, 10);
+    var hash = BcryptJS.hashSync(password, 10);
+    // Bcrypt hash made by htpasswd has the prefix $2y$ instead of $2a$
+    hash = '$2y$' + hash.substring(4);
     var text = `root:${hash}\n`;
     FS.writeFileSync(`${configFolder}/trambar.htpasswd`, text);
     return true;
