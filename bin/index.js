@@ -335,10 +335,10 @@ function installDockerCompose() {
     } else if (isInstalled('pacman')) {
         return run('pacman --noconfirm -S docker-compose');
     } else if (isInstalled('yum')) {
-        return run('yum install epel-release')
-            && run('yum install -y python-pip')
+        return run('yum -y install epel-release')
+            && run('yum -y install python-pip')
             && run('pip install docker-compose')
-            && run('yum upgrade python*');
+            && run('yum -y upgrade python*');
     } else if (isInstalled('urpmi')) {
         return run('urpmi --auto docker-compose');
     } else {
