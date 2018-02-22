@@ -307,12 +307,15 @@ function installDocker() {
         return run('apt-get -y install docker.io');
     } else if (isInstalled('pacman')) {
         return run('pacman --noconfirm -S docker')
+            && run('systemctl enable docker')
             && run('systemctl start docker');
     } else if (isInstalled('yum')) {
         return run('yum -y install docker')
+            && run('systemctl enable docker')
             && run('systemctl start docker');
     } else if (isInstalled('urpmi')) {
         return run('urpmi --auto docker')
+            && run('systemctl enable docker')
             && run('systemctl start docker');
     } else {
         console.log('Unable to find suitable package manager');
