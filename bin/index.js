@@ -177,6 +177,9 @@ function install() {
     if (!pullImages()) {
         return false;
     }
+    console.log('');
+    console.log(`Installation complete`);
+    console.log(`Run "${getScriptName()} start" to start Trambar`);
     return true;
 }
 
@@ -476,7 +479,7 @@ function checkFileExistence(path) {
 
 function getProcesses(options) {
     var cmd = 'docker';
-    var args = [ 'ps', '--format={{json .}}' ];
+    var args = [ 'ps', '--format={ "Image": {{json .Image}}, "Names": {{json .Names}}, "ID": {{json .ID }} }' ];
     try {
         var text = ChildProcess.execFileSync(cmd, args);
         var list = parseJSONList(text);
@@ -622,7 +625,17 @@ function parseJSONList(stdout) {
 }
 
 function getVersion() {
+    var json = getPackage();
+    return _.get(json, 'version', 'unknown');
+}
+
+function getScriptName() {
+    var json = getPackage();
+    return _.get(json, 'name', 'unknown');
+}
+
+function getPackage() {
     var text = FS.readFileSync(`${__dirname}/../package.json`, 'utf-8');
     var json = JSON.parse(text);
-    return _.get(json, 'version', 'unknown');
+    return json;
 }
