@@ -11,7 +11,8 @@ var CommandLineUsage = require('command-line-usage');
 var ReadlineSync = require('readline-sync');
 var IsRoot = require('is-root');
 
-var configFolder = '/etc/trambar';
+var defaultConfigFolder = '/etc/trambar';
+var defaultPrefix = 'trambar';
 var defaultPassword = 'password';
 
 var optionDefinitions = [
@@ -25,7 +26,7 @@ var optionDefinitions = [
         name: 'config',
         alias: 'c',
         type: String,
-        description: `Specify config directory (default: /etc/trambar)`
+        description: `Specify config directory (default: ${defaultConfigFolder})`
     },
     {
         name: 'help',
@@ -37,7 +38,7 @@ var optionDefinitions = [
         name: 'prefix',
         alias: 'p',
         type: String,
-        description: `Specifu Docker container prefix (default: trambar)`
+        description: `Specify Docker container prefix (default: ${defaultPrefix})`
     },
     {
         name: 'version',
@@ -64,7 +65,9 @@ var scriptDescription = [
             { name: 'env', summary: 'Edit Trambar environment variables' },
             { name: 'install', summary: 'Download Docker images and create default configuration' },
             { name: 'password', summary: 'Set password of root account' },
+            { name: 'restart', summary: 'Restart Trambar' },
             { name: 'start', summary: 'Start Trambar' },
+            { name: 'stats', summary: 'Show Trambar CPU and memory usage' },
             { name: 'stop', summary: 'Stop Trambar' },
             { name: 'update', summary: 'Pull latest images and restart Trambar' },
             { name: 'uninstall', summary: 'Remove Trambar images and configuration' },
@@ -79,6 +82,8 @@ var scriptDescription = [
 ];
 
 var options = CommandLineArgs(optionDefinitions);
+var configFolder = options.config || defaultConfigFolder;
+var prefix = options.prefix || defaultPrefix;
 var command = _.get(options, [ '*', 0 ]);
 if (command) {
     if (!runCommand(command)) {
@@ -105,8 +110,12 @@ function runCommand(command) {
             return setPassword();
         case 'install':
             return install();
+        case 'restart':
+            return restart();
         case 'start':
             return start();
+        case 'stats':
+            return showStats();
         case 'stop':
             return stop();
         case 'update':
@@ -172,12 +181,24 @@ function start() {
     if (!checkDockerAccess()) {
         return false;
     }
-    if (!gotoConfigFolder()) {
+    if (!checkConfiguration()) {
         return false;
     }
     if (!createContainers()) {
         return false;
     }
+    return true;
+}
+
+function showStats() {
+    if (!checkDockerAccess()) {
+        return false;
+    }
+    if (!isRunning()) {
+        console.log('Trambar is not currently running');
+        return false;
+    }
+    run('docker stats $(docker ps --format={{.Names}})');
     return true;
 }
 
@@ -188,7 +209,28 @@ function stop() {
     if (!checkConfiguration()) {
         return false;
     }
+    if (!isRunning()) {
+        console.log('Trambar is not currently running');
+        return false;
+    }
     if (!destroyContainers()) {
+        return false;
+    }
+    return true;
+}
+
+function restart() {
+    if (!checkDockerAccess()) {
+        return false;
+    }
+    if (!checkConfiguration()) {
+        return false;
+    }
+    if (!isRunning()) {
+        console.log('Trambar is not currently running');
+        return false;
+    }
+    if (!restartContainers()) {
         return false;
     }
     return true;
@@ -244,11 +286,15 @@ function installDocker() {
         return false;
     }
     if (isInstalled('apt-get')) {
-        run('apt-get -y install docker.io');
+        return run('apt-get -y install docker.io');
     } else if (isInstalled('pacman')) {
-        run('pacman --noconfirm -S docker');
+        return run('pacman --noconfirm -S docker') && run('systemctl start docker');
     } else if (isInstalled('yum')) {
-
+        
+    } else if (isInstalled('urpmi')) {
+        return run('urpmi --auto docker') && run('systemctl start docker');
+    } else {
+        return false;
     }
 }
 
@@ -260,11 +306,15 @@ function installDockerCompose() {
         return false;
     }
     if (isInstalled('apt-get')) {
-        run('apt-get -y install docker-compose');
+        return run('apt-get -y install docker-compose');
     } else if (isInstalled('pacman')) {
-        run('pacman --noconfirm -S docker-compose');
+        return run('pacman --noconfirm -S docker-compose');
     } else if (isInstalled('yum')) {
 
+    } else if (isInstalled('urpmi')) {
+        return run('urpmi --auto docker-compose');
+    } else {
+        return false;
     }
 }
 
@@ -294,12 +344,17 @@ function removeImages() {
 
 function createContainers() {
     process.chdir(configFolder);
-    return run('docker-compose', [ '-p', 'trambar', 'up', '-d' ]);
+    return run('docker-compose', [ '-p', prefix, 'up', '-d' ]);
 }
 
 function destroyContainers() {
     process.chdir(configFolder);
-    return run('docker-compose', [ '-p', 'trambar', 'down' ]);
+    return run('docker-compose', [ '-p', prefix, 'down' ]);
+}
+
+function restartContainers() {
+    process.chdir(configFolder);
+    return run('docker-compose', [ '-p', prefix, 'restart' ]);
 }
 
 function confirm(question, def) {
@@ -357,7 +412,10 @@ function checkRootAccess() {
 function checkDockerAccess() {
     var cmd = `docker ps`;
     try {
-        ChildProcess.execSync(cmd);
+        var options = {
+            stdio: [ 'pipe', 'pipe', 'ignore' ]
+        };
+        ChildProcess.execSync(cmd, options);
         return true;
     } catch (err) {
         if (!isInstalled('docker')) {
@@ -389,7 +447,7 @@ function checkFileExistence(path) {
 
 function getProcesses(options) {
     var cmd = 'docker';
-    var args = [ 'ps', '--format="{{json .}}"' ];
+    var args = [ 'ps', '--format={{json .}}' ];
     try {
         var text = ChildProcess.execFileSync(cmd, args);
         var list = parseJSONList(text);
@@ -410,7 +468,7 @@ function getProcesses(options) {
 
 function getImages(options) {
     var cmd = 'docker';
-    var args = [ 'images', '--format="{ "Repository": {{json .Repository}}, "ID": {{json .ID }} }"' ];
+    var args = [ 'images', '--format={ "Repository": {{json .Repository}}, "ID": {{json .ID }} }' ];
     try {
         var text = ChildProcess.execFileSync(cmd, args);
         var list = parseJSONList(text);
@@ -454,10 +512,26 @@ function createDefaultConfiguration() {
         FS.writeFileSync(`${configFolder}/docker-compose.yml`, dockerCompseYML);
         FS.writeFileSync(`${configFolder}/.env`, env);
         FS.chmodSync(`${configFolder}/.env`, 0600);
-        var password = promptForPassword(`Password for root account [${defaultPassword}]:`, defaultPassword);
+        var password = promptForPassword(`Password for Trambar root account [${defaultPassword}]:`, defaultPassword);
         savePassword(password);
         return true;
-    } catch(err) {
+    } catch (err) {
+        console.error(err.message);
+        return false;
+    }
+}
+
+function destroyConfiguration() {
+    try {
+        FS.unlinkSync(`${configFolder}/docker-compose.yml`);
+        FS.unlinkSync(`${configFolder}/.env`);
+        FS.unlinkSync(`${configFolder}/trambar.htpasswd`);
+        try {
+            FS.rmdirSync(configFolder);
+        } catch (err) {
+        }
+        return true;
+    } catch (err) {
         console.error(err.message);
         return false;
     }
@@ -474,9 +548,12 @@ function savePassword(password) {
 }
 
 function isInstalled(program) {
-    var cmd = `${program} -v`;
+    var cmd = `${program} --version`;
     try {
-        ChildProcess.execSync(cmd);
+        var options = {
+            stdio: [ 'pipe', 'pipe', 'ignore' ]
+        };
+        ChildProcess.execSync(cmd, options);
         return true;
     } catch (err) {
         return false;
@@ -487,17 +564,30 @@ function run(cmd, args) {
     var options = {
         stdio: [ 'inherit', 'inherit', 'inherit' ]
     };
-    if (args) {
-        ChildProcess.execFileSync(cmd, args, options);
-    } else {
-        ChildProcess.execSync(cmd, options);
+    try {
+        if (args) {
+            ChildProcess.execFileSync(cmd, args, options);
+        } else {
+            ChildProcess.execSync(cmd, options);
+        }
+        return true;
+    } catch (err) {
+        console.error(err.message);
+        return false;
     }
 }
 
-function parseJSONList(text) {
+function parseJSONList(stdout) {
+    var text = stdout.toString('utf-8');
     var lines = _.split(text, /[\r\n]+/);
+    lines = _.filter(_.map(lines, _.trim));
     var list = _.map(lines, (line) => {
-        return JSON.parse(line);
+        try {
+            return JSON.parse(line);
+        } catch (err) {
+            console.error(err.message);
+            return {};
+        }
     });
     return list;
 }
