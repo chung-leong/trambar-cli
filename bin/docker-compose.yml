@@ -19,7 +19,7 @@ services:
     restart: always
     image: trambar/trambar-postgres
     volumes:
-      - ${TRAMBAR_DATABASE_FOLDER}:/var/lib/postgresql/data:z
+      - ${TRAMBAR_DATABASE_FOLDER}:/var/lib/postgresql/data:Z
     environment:
       - POSTGRES_DB=${TRAMBAR_DATABASE_NAME}
       - POSTGRES_USER=root
