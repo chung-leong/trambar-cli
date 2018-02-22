@@ -64,6 +64,7 @@ var scriptDescription = [
             { name: 'compose', summary: 'Edit Trambar Docker Compose configuration file' },
             { name: 'env', summary: 'Edit Trambar environment variables' },
             { name: 'install', summary: 'Download Docker images and create default configuration' },
+            { name: 'logs', summary: 'Show Trambar server logs' },
             { name: 'password', summary: 'Set password of root account' },
             { name: 'restart', summary: 'Restart Trambar' },
             { name: 'start', summary: 'Start Trambar' },
@@ -106,10 +107,12 @@ function runCommand(command) {
             return editCompose();
         case 'env':
             return editEnv();
-        case 'password':
-            return setPassword();
         case 'install':
             return install();
+        case 'logs':
+            return showLogs();
+        case 'password':
+            return setPassword();
         case 'restart':
             return restart();
         case 'start':
@@ -194,11 +197,26 @@ function showStats() {
     if (!checkDockerAccess()) {
         return false;
     }
+    var processes = getProcesses();
+    if (_.isEmpty(processes)) {
+        console.log('Trambar is not currently running');
+        return false;
+    }
+    var names = _.map(processes, 'Names').sort();
+    run('docker', _.concat('stats', names));
+    return true;
+}
+
+function showLogs() {
+    if (!checkDockerAccess()) {
+        return false;
+    }
     if (!isRunning()) {
         console.log('Trambar is not currently running');
         return false;
     }
-    run('docker stats $(docker ps --format={{.Names}})');
+    process.chdir(configFolder);
+    return run('docker-compose', [ '-p', prefix, 'logs' ]);
     return true;
 }
 
@@ -290,7 +308,7 @@ function installDocker() {
     } else if (isInstalled('pacman')) {
         return run('pacman --noconfirm -S docker') && run('systemctl start docker');
     } else if (isInstalled('yum')) {
-        
+
     } else if (isInstalled('urpmi')) {
         return run('urpmi --auto docker') && run('systemctl start docker');
     } else {
