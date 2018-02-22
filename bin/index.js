@@ -365,6 +365,7 @@ function pullImages() {
             }
         }
     });
+    return true;
 }
 
 function removeImages() {
