@@ -3,21 +3,21 @@ services:
   # Nginx web server
   nginx:
     restart: always
-    image: trambar/trambar-nginx
+    image: trambar/trambar-nginx:${TRAMBAR_BUILD}
     ports:
-      - 80:80
-      - 443:443
+      - ${TRAMBAR_HTTP_PORT}:80
+<%=(ssl ? '' : '#') %>      - ${TRAMBAR_HTTPS_PORT}:443
     volumes:
       - .:/etc/nginx/extra
       - ${TRAMBAR_MEDIA_FOLDER}:/var/cache/media:z
-      - ${TRAMBAR_SSL_FOLDER}:${TRAMBAR_SSL_FOLDER}
+<%=(ssl ? '' : '#') %>      - ${TRAMBAR_SSL_FOLDER}:${TRAMBAR_SSL_FOLDER}
     depends_on:
       - data_server
       - event_notifier
   # PostgreSQL database manager
   postgres:
     restart: always
-    image: trambar/trambar-postgres
+    image: trambar/trambar-postgres:${TRAMBAR_BUILD}
     volumes:
       - ${TRAMBAR_DATABASE_FOLDER}:/var/lib/postgresql/data:Z
     environment:
@@ -26,7 +26,7 @@ services:
       - POSTGRES_PASSWORD=${TRAMBAR_DATABASE_ROOT_PASSWORD}
   schema_manager:
     restart: always
-    image: trambar/trambar-node
+    image: trambar/trambar-node:${TRAMBAR_BUILD}
     environment:
       - NODE_PATH=/opt/trambar/backend/node_modules:/opt/trambar/backend/src:/opt/trambar/backend/src/lib:/opt/trambar/common/src
       - NODE_ENV=production
@@ -43,7 +43,7 @@ services:
   # Data server (Node.js)
   data_server:
     restart: always
-    image: trambar/trambar-node
+    image: trambar/trambar-node:${TRAMBAR_BUILD}
     environment:
       - NODE_PATH=/opt/trambar/backend/node_modules:/opt/trambar/backend/src:/opt/trambar/backend/src/lib:/opt/trambar/common/src
       - NODE_ENV=production
@@ -57,7 +57,7 @@ services:
   # Admin data server (Node.js)
   admin_data_server:
     restart: always
-    image: trambar/trambar-node
+    image: trambar/trambar-node:${TRAMBAR_BUILD}
     environment:
       - NODE_PATH=/opt/trambar/backend/node_modules:/opt/trambar/backend/src:/opt/trambar/backend/src/lib:/opt/trambar/common/src
       - NODE_ENV=production
@@ -71,7 +71,7 @@ services:
   # Authentication manager (Node.js)
   session_manager:
     restart: always
-    image: trambar/trambar-node
+    image: trambar/trambar-node:${TRAMBAR_BUILD}
     volumes:
       - ${TRAMBAR_HTPASSWD_FOLDER}:/etc/trambar
     environment:
@@ -88,7 +88,7 @@ services:
   # Media server (Node.js)
   media_server:
     restart: always
-    image: trambar/trambar-node
+    image: trambar/trambar-node:${TRAMBAR_BUILD}
     volumes:
       - ${TRAMBAR_MEDIA_FOLDER}:/var/cache/media:z
     environment:
@@ -104,7 +104,7 @@ services:
   # WebSocket Notifier (Node.js)
   event_notifier:
     restart: always
-    image: trambar/trambar-node
+    image: trambar/trambar-node:${TRAMBAR_BUILD}
     environment:
       - NODE_PATH=/opt/trambar/backend/node_modules:/opt/trambar/backend/src:/opt/trambar/backend/src/lib:/opt/trambar/common/src
       - NODE_ENV=production
@@ -118,7 +118,7 @@ services:
   # Live Data Invalidator (Node.js)
   live_data_invalidator:
     restart: always
-    image: trambar/trambar-node
+    image: trambar/trambar-node:${TRAMBAR_BUILD}
     environment:
       - NODE_PATH=/opt/trambar/backend/node_modules:/opt/trambar/backend/src:/opt/trambar/backend/src/lib:/opt/trambar/common/src
       - NODE_ENV=production
@@ -132,7 +132,7 @@ services:
   # Live Data Updater (Node.js)
   live_data_updater:
     restart: always
-    image: trambar/trambar-node
+    image: trambar/trambar-node:${TRAMBAR_BUILD}
     environment:
       - NODE_PATH=/opt/trambar/backend/node_modules:/opt/trambar/backend/src:/opt/trambar/backend/src/lib:/opt/trambar/common/src
       - NODE_ENV=production
@@ -146,7 +146,7 @@ services:
   # GitLab Adapter (Node.js)
   gitlab_adapter:
     restart: always
-    image: trambar/trambar-node
+    image: trambar/trambar-node:${TRAMBAR_BUILD}
     environment:
       - NODE_PATH=/opt/trambar/backend/node_modules:/opt/trambar/backend/src:/opt/trambar/backend/src/lib:/opt/trambar/common/src
       - NODE_ENV=production

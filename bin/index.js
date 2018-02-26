@@ -10,10 +10,15 @@ var CommandLineArgs = require('command-line-args');
 var CommandLineUsage = require('command-line-usage');
 var ReadlineSync = require('readline-sync');
 var IsRoot = require('is-root');
+var CommonDir = require('commondir');
 
 var defaultConfigFolder = '/etc/trambar';
 var defaultPrefix = 'trambar';
 var defaultPassword = 'password';
+var defaultBuild = 'latest';
+var defaultHostName = guessServerName();
+var defaultCertPath = guessCertPath();
+var defaultKeyPath = guessKeyPath();
 
 var optionDefinitions = [
     {
@@ -21,6 +26,12 @@ var optionDefinitions = [
         type: String,
         multiple: true,
         defaultOption: true,
+    },
+    {
+        name: 'build',
+        alias: 'b',
+        type: String,
+        description: `Specify Trambar build (default: ${defaultBuild})`
     },
     {
         name: 'config',
@@ -85,6 +96,7 @@ var scriptDescription = [
 var options = CommandLineArgs(optionDefinitions);
 var configFolder = options.config || defaultConfigFolder;
 var prefix = options.prefix || defaultPrefix;
+var build = options.build || defaultBuild;
 var command = _.get(options, [ '*', 0 ]);
 if (command) {
     if (!runCommand(command)) {
@@ -165,13 +177,13 @@ function install() {
     if (!checkRootAccess()) {
         return false;
     }
+    if (!createConfiguration()) {
+        return false;
+    }
     if (!installDocker()) {
         return false;
     }
     if (!installDockerCompose()) {
-        return false;
-    }
-    if (!createDefaultConfiguration()) {
         return false;
     }
     if (!pullImages()) {
@@ -285,9 +297,6 @@ function uninstall() {
         }
     }
     if (!removeImages()) {
-        return false;
-    }
-    if (!destroyConfiguration()) {
         return false;
     }
     return true;
@@ -429,6 +438,94 @@ function promptForPassword(question, def) {
     return password;
 }
 
+function promptForText(question, def) {
+    var text;
+    if (options.yes) {
+        console.log(question);
+        return def;
+    }
+    do {
+        var answer = _.trim(ReadlineSync.question(question + ' '));
+        if (!answer) {
+            text = def;
+        } else {
+            text = answer;
+        }
+    } while(text === undefined)
+    return text;
+}
+
+function promptForPath(question, def) {
+    var path;
+    if (options.yes) {
+        console.log(question);
+        return def;
+    }
+    do {
+        var answer = _.trim(ReadlineSync.question(question + ' '));
+        if (!answer) {
+            path = def;
+        } else {
+            path = answer;
+        }
+        if (path) {
+            if (!FS.existsSync(path)) {
+                console.error(`File not found: ${path}`);
+                path = undefined;
+            }
+        }
+    } while(path === undefined)
+    return path;
+}
+
+function promptForPort(question, def) {
+    var port;
+    if (options.yes) {
+        console.log(question);
+        return def;
+    }
+    do {
+        var answer = _.trim(ReadlineSync.question(question + ' '));
+        if (!answer) {
+            port = def;
+        } else {
+            port = parseInt(answer);
+            if (port !== port) {
+                port = undefined;
+            }
+        }
+        if (!checkPort(port)) {
+            console.error(`Port is in use: ${port}`);
+            port = undefined;
+        }
+    } while(port === undefined)
+    return port;
+}
+
+function checkPort(port) {
+    try {
+        var cmd = 'netstat';
+        var args = [ '-tulpen' ];
+        var options = {
+            stdio: [ 'pipe', 'pipe', 'ignore' ]
+        };
+        var stdout = ChildProcess.execFileSync(cmd, args, options);
+        var text = stdout.toString('utf-8');
+        var lines = _.split(text, /[\r\n]/);
+        var busy = _.some(lines, (line) => {
+            if (/LISTEN/.test(line)) {
+                if ((new RegExp(`:${port}\\b`)).test(line)) {
+                    return true;
+                }
+            }
+        });
+        return !busy;
+    } catch (err) {
+        console.error(err);
+    }
+    return true;
+}
+
 function isRunning() {
     var processes = getProcesses();
     return !_.isEmpty(processes);
@@ -532,20 +629,43 @@ function removeImage(id) {
     }
 }
 
-function createDefaultConfiguration() {
+function createConfiguration() {
     try {
         FS.mkdirpSync(configFolder);
-        var dockerCompseYML = FS.readFileSync(`${__dirname}/docker-compose.yml`, 'utf-8');
-        var envTemplate = FS.readFileSync(`${__dirname}/env-template`, 'utf-8');
-        var envFunc = _.template(envTemplate);
-        var password = _.map([ 1, 2, 3, 4], () => {
+        var config = { build };
+        config.ssl = confirm(`Set up SSL? [y/N]`, false);
+        if (config.ssl) {
+            config.server_name = promptForText(`Server domain name [${defaultHostName}]:`, defaultHostName);
+            config.http_port = promptForPort(`HTTP port [80]:`, 80);
+            config.https_port = promptForPort(`HTTPS port [443]:`, 443);
+            config.cert_path = promptForPath(`Full path of certificate [${defaultCertPath}]:`, defaultCertPath || undefined);
+            config.key_path = promptForPath(`Full path of private key [${defaultKeyPath}]:`, defaultKeyPath || undefined);
+            config.ssl_folder = CommonDir([
+                config.cert_path,
+                config.key_path,
+                FS.realpathSync(config.cert_path),
+                FS.realpathSync(config.key_path),
+            ]);
+            if (/^\/[^\/]+$/.test(config.ssl_folder)) {
+                console.error('Certificate location requires mounting of root level folder');
+                process.exit(-1);
+            }
+        } else {
+            config.server_name = defaultHostName;
+            config.http_port = promptForPort(`HTTP port [80]:`, 80);
+            config.https_port = 443;
+            config.cert_path = '';
+            config.key_path = '';
+            config.ssl_folder = '';
+        }
+        config.password = _.map([ 1, 2, 3, 4], () => {
             return Crypto.randomBytes(16).toString('hex');
         });
-        var env = envFunc({ password });
-        FS.writeFileSync(`${configFolder}/docker-compose.yml`, dockerCompseYML);
-        FS.writeFileSync(`${configFolder}/.env`, env);
-        FS.chmodSync(`${configFolder}/.env`, 0600);
         var password = promptForPassword(`Password for Trambar root account [${defaultPassword}]:`, defaultPassword);
+
+        createConfigFile(`${configFolder}/docker-compose.yml`, 'docker-compose.yml', config);
+        createConfigFile(`${configFolder}/ssl.conf`, 'ssl.conf', config);
+        createConfigFile(`${configFolder}/.env`, 'env', config, 0600);
         savePassword(password);
         return true;
     } catch (err) {
@@ -554,19 +674,20 @@ function createDefaultConfiguration() {
     }
 }
 
-function destroyConfiguration() {
-    try {
-        FS.unlinkSync(`${configFolder}/docker-compose.yml`);
-        FS.unlinkSync(`${configFolder}/.env`);
-        FS.unlinkSync(`${configFolder}/trambar.htpasswd`);
-        try {
-            FS.rmdirSync(configFolder);
-        } catch (err) {
+function createConfigFile(path, name, config, mode) {
+    if (FS.existsSync(path)) {
+        if (!confirm(`Overwrite ${path}? [y/N]`, false)) {
+            return;
         }
-        return true;
-    } catch (err) {
-        console.error(err.message);
-        return false;
+    }
+    var templatePath = `${__dirname}/templates/${name}`;
+    var template = FS.readFileSync(templatePath, 'utf-8');
+    var fn = _.template(template, { interpolate: /<%=([\s\S]+?)%>/g });
+    var text = fn(config);
+
+    FS.writeFileSync(path, text);
+    if (mode) {
+        FS.chmodSync(path, mode);
     }
 }
 
@@ -578,7 +699,13 @@ function savePassword(password) {
     // Bcrypt hash made by htpasswd has the prefix $2y$ instead of $2a$
     hash = '$2y$' + hash.substring(4);
     var text = `root:${hash}\n`;
-    FS.writeFileSync(`${configFolder}/trambar.htpasswd`, text);
+    var path = `${configFolder}/trambar.htpasswd`;
+    if (FS.existsSync(path)) {
+        if (!confirm(`Overwrite ${path}? [y/N]`, false)) {
+            return;
+        }
+    }
+    FS.writeFileSync(path, text);
     return true;
 }
 
@@ -627,6 +754,47 @@ function parseJSONList(stdout) {
     return list;
 }
 
+var certbotLivePath = '/etc/letsencrypt/live';
+
+function findCertbotDomain() {
+    try {
+        if (FS.existsSync(certbotLivePath)) {
+            var items = FS.readdirSync(certbotLivePath);
+            return _.first(items);
+        }
+    } catch (err) {
+    }
+}
+
+function findCertbotCert() {
+    var name = findCertbotDomain();
+    if (name) {
+        return `${certbotLivePath}/${name}/fullchain.pem`;
+    }
+}
+
+function findCertbotKey() {
+    var name = findCertbotDomain();
+    if (name) {
+        return `${certbotLivePath}/${name}/privkey.pem`;
+    }
+}
+
+function guessServerName() {
+    return findCertbotDomain()
+        || getHostName();
+}
+
+function guessCertPath() {
+    return findCertbotCert()
+        || '';
+}
+
+function guessKeyPath() {
+    return findCertbotKey()
+        || '';
+}
+
 function getVersion() {
     var json = getPackage();
     return _.get(json, 'version', 'unknown');
@@ -635,6 +803,19 @@ function getVersion() {
 function getScriptName() {
     var json = getPackage();
     return _.get(json, 'name', 'unknown');
+}
+
+function getHostName() {
+    try {
+        var cmd = 'hostname';
+        var options = {
+            stdio: [ 'pipe', 'pipe', 'ignore' ]
+        };
+        var stdout = ChildProcess.execFileSync(cmd, [], options);
+        return _.trim(stdout.toString('utf-8'));
+    } catch (err) {
+        return 'localhost';
+    }
 }
 
 function getPackage() {

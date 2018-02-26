@@ -1,3 +1,4 @@
+TRAMBAR_BUILD=<%=build%>
 TRAMBAR_DATABASE_NAME=trambar
 TRAMBAR_DATABASE_FOLDER=/srv/trambar/postgres
 TRAMBAR_DATABASE_ROOT_PASSWORD=<%=password[0]%>
@@ -7,4 +8,6 @@ TRAMBAR_DATABASE_AUTH_PASSWORD=<%=password[3]%>
 TRAMBAR_MEDIA_FOLDER=/srv/trambar/media
 TRAMBAR_HTPASSWD_FOLDER=./
 TRAMBAR_HTPASSWD_NAME=trambar.htpasswd
-TRAMBAR_SSL_FOLDER=/etc/letsencrypt
+TRAMBAR_HTTP_PORT=<%=http_port%>
+<%=(ssl ? '' : '#') %>TRAMBAR_HTTPS_PORT=<%=https_port%>
+<%=(ssl ? '' : '#') %>TRAMBAR_SSL_FOLDER=<%=ssl_folder%>

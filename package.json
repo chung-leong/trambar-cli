@@ -17,6 +17,7 @@
     "bcryptjs": "^2.4.3",
     "command-line-args": "^4.0.7",
     "command-line-usage": "^4.0.1",
+    "commondir": "^1.0.1",
     "is-root": "^1.0.0",
     "lodash": "^4.17.5",
     "mkdirp": "^0.5.1",
