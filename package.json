@@ -1,6 +1,6 @@
 {
   "name": "trambar",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "A utility for installing and managing a Trambar server",
   "bin": "bin/index.js",
   "scripts": {

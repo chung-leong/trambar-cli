@@ -12,6 +12,8 @@ var ReadlineSync = require('readline-sync');
 var IsRoot = require('is-root');
 var CommonDir = require('commondir');
 
+var certbotLivePath = '/etc/letsencrypt/live';
+
 var defaultConfigFolder = '/etc/trambar';
 var defaultPrefix = 'trambar';
 var defaultPassword = 'password';
@@ -753,8 +755,6 @@ function parseJSONList(stdout) {
     });
     return list;
 }
-
-var certbotLivePath = '/etc/letsencrypt/live';
 
 function findCertbotDomain() {
     try {
