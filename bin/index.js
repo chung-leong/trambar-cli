@@ -286,6 +286,9 @@ function update() {
             return false;
         }
     }
+    if (!removeUntaggedImages()) {
+        return false;
+    }
     return true;
 }
 
@@ -362,18 +365,18 @@ function installDockerCompose() {
 }
 
 function pullImages() {
-    var imagesBefore = getImages();
     process.chdir(configFolder);
     if (!run('docker-compose', [ 'pull' ])) {
         return false;
     }
-    var imagesAfter = getImages({ all: true });
-    _.each(imagesBefore, (before) => {
-        var after = _.find(imagesAfter, { ID: before.ID });
-        if (after) {
-            if (!after.Repository) {
-                removeImage(before.ID);
-            }
+    return true;
+}
+
+function removeUntaggedImages() {
+    var images = getImages();
+    _.each(images, (image) => {
+        if (image.Tag === '<none>') {
+            removeImage(image.ID);
         }
     });
     return true;
@@ -600,7 +603,7 @@ function getProcesses(options) {
 
 function getImages(options) {
     var cmd = 'docker';
-    var args = [ 'images', '--format={ "Repository": {{json .Repository}}, "ID": {{json .ID }} }' ];
+    var args = [ 'images', '--format={ "Repository": {{json .Repository}}, "ID": {{json .ID }}, "Tag": {{json .Tag}} }' ];
     try {
         var text = ChildProcess.execFileSync(cmd, args);
         var list = parseJSONList(text);
