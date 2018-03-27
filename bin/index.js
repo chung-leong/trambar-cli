@@ -636,7 +636,6 @@ function removeImage(id) {
 
 function createConfiguration() {
     try {
-        FS.mkdirpSync(configFolder);
         var config = { build };
         config.ssl = confirm(`Set up SSL? [y/N]`, false);
         if (config.ssl) {
@@ -669,7 +668,7 @@ function createConfiguration() {
         var password = promptForPassword(`Password for Trambar root account [${defaultPassword}]:`, defaultPassword);
 
         createConfigFile(`${configFolder}/docker-compose.yml`, 'docker-compose.yml', config);
-        createConfigFile(`${configFolder}/ssl.conf`, 'ssl.conf', config);
+        createConfigFile(`${configFolder}/default/ssl.conf`, 'ssl.conf', config);
         createConfigFile(`${configFolder}/.env`, 'env', config, 0600);
         savePassword(password);
         return true;
@@ -685,6 +684,8 @@ function createConfigFile(path, name, config, mode) {
             return;
         }
     }
+    var folder = Path.dirname(path);
+    FS.mkdirpSync(folder);
     var templatePath = `${__dirname}/templates/${name}`;
     var template = FS.readFileSync(templatePath, 'utf-8');
     var fn = _.template(template, { interpolate: /<%=([\s\S]+?)%>/g });
