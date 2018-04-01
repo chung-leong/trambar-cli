@@ -278,10 +278,11 @@ function update() {
     if (!checkConfiguration()) {
         return false;
     }
+    var restart = isRunning();
     if (!pullImages()) {
         return false;
     }
-    if (isRunning()) {
+    if (restart) {
         if (!createContainers()) {
             return false;
         }
