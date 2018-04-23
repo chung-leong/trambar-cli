@@ -18,9 +18,6 @@ var defaultConfigFolder = '/etc/trambar';
 var defaultPrefix = 'trambar';
 var defaultPassword = 'password';
 var defaultBuild = 'latest';
-var defaultHostName = guessServerName();
-var defaultCertPath = guessCertPath();
-var defaultKeyPath = guessKeyPath();
 
 var optionDefinitions = [
     {
@@ -637,39 +634,47 @@ function removeImage(id) {
 
 function createConfiguration() {
     try {
-        var config = { build };
-        config.ssl = confirm(`Set up SSL? [y/N]`, false);
+        var config = {
+            ssl: false,
+            certbot: false,
+            server_name: '',
+            contact_email: '',
+            http_port: 80,
+            https_port: 443,
+            cert_path: '',
+            key_path: '',
+            ssl_folder: '',
+            build,
+        };
+        config.ssl = confirm(`Set up SSL? [Y/n]`, true);
         if (config.ssl) {
-            config.server_name = promptForText(`Server domain name [${defaultHostName}]:`, defaultHostName);
-            config.http_port = promptForPort(`HTTP port [80]:`, 80);
-            config.https_port = promptForPort(`HTTPS port [443]:`, 443);
-            config.cert_path = promptForPath(`Full path of certificate [${defaultCertPath}]:`, defaultCertPath || undefined);
-            config.key_path = promptForPath(`Full path of private key [${defaultKeyPath}]:`, defaultKeyPath || undefined);
-            config.ssl_folder = CommonDir([
-                config.cert_path,
-                config.key_path,
-                FS.realpathSync(config.cert_path),
-                FS.realpathSync(config.key_path),
-            ]);
-            if (/^\/[^\/]+$/.test(config.ssl_folder)) {
-                console.error('Certificate location requires mounting of root level folder');
-                process.exit(-1);
+            config.certbot = confirm(`Use certbot (https://certbot.eff.org/)? [Y/n]`, true);
+            config.server_name = promptForText(`Server domain name:`);
+            if (config.certbot) {
+                config.contact_email = promptForText(`Contact e-mail:`);
+            } else {
+                config.cert_path = promptForPath(`Full path of certificate:`);
+                config.key_path = promptForPath(`Full path of private key:`);
+                config.ssl_folder = CommonDir([
+                    config.cert_path,
+                    config.key_path,
+                    FS.realpathSync(config.cert_path),
+                    FS.realpathSync(config.key_path),
+                ]);
+                if (/^\/[^\/]+$/.test(config.ssl_folder)) {
+                    console.error('Certificate location requires mounting of root level folder');
+                    process.exit(-1);
+                }
             }
-        } else {
-            config.server_name = defaultHostName;
-            config.http_port = promptForPort(`HTTP port [80]:`, 80);
-            config.https_port = 443;
-            config.cert_path = '';
-            config.key_path = '';
-            config.ssl_folder = '';
+            config.https_port = promptForPort(`HTTPS port [443]:`, 443);
         }
+        config.http_port = promptForPort(`HTTP port [80]:`, 80);
         config.password = _.map([ 1, 2, 3, 4], () => {
             return Crypto.randomBytes(16).toString('hex');
         });
         var password = promptForPassword(`Password for Trambar root account [${defaultPassword}]:`, defaultPassword);
 
         createConfigFile(`${configFolder}/docker-compose.yml`, 'docker-compose.yml', config);
-        createConfigFile(`${configFolder}/default/ssl.conf`, 'ssl.conf', config);
         createConfigFile(`${configFolder}/.env`, 'env', config, 0600);
         savePassword(password);
         return true;
@@ -692,6 +697,7 @@ function createConfigFile(path, name, config, mode) {
     var fn = _.template(template, { interpolate: /<%=([\s\S]+?)%>/g });
     var text = fn(config);
 
+    console.log(`Saving ${path}`)
     FS.writeFileSync(path, text);
     if (mode) {
         FS.chmodSync(path, mode);
@@ -712,6 +718,7 @@ function savePassword(password) {
             return;
         }
     }
+    console.log(`Saving ${path}`)
     FS.writeFileSync(path, text);
     return true;
 }
@@ -759,45 +766,6 @@ function parseJSONList(stdout) {
         }
     });
     return list;
-}
-
-function findCertbotDomain() {
-    try {
-        if (FS.existsSync(certbotLivePath)) {
-            var items = FS.readdirSync(certbotLivePath);
-            return _.first(items);
-        }
-    } catch (err) {
-    }
-}
-
-function findCertbotCert() {
-    var name = findCertbotDomain();
-    if (name) {
-        return `${certbotLivePath}/${name}/fullchain.pem`;
-    }
-}
-
-function findCertbotKey() {
-    var name = findCertbotDomain();
-    if (name) {
-        return `${certbotLivePath}/${name}/privkey.pem`;
-    }
-}
-
-function guessServerName() {
-    return findCertbotDomain()
-        || getHostName();
-}
-
-function guessCertPath() {
-    return findCertbotCert()
-        || '';
-}
-
-function guessKeyPath() {
-    return findCertbotKey()
-        || '';
 }
 
 function getVersion() {

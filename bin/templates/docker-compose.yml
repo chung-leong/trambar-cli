@@ -3,14 +3,31 @@ services:
   # Nginx web server
   nginx:
     restart: always
-    image: trambar/trambar-nginx:${TRAMBAR_BUILD}
+    # use image without Certbot
+    <%=(!certbot ? '' : '#')%>image: trambar/trambar-nginx:${TRAMBAR_BUILD}
+    # use image with Certbot
+    <%=(certbot ? '' : '#')%>image: trambar/trambar-nginx-certbot:${TRAMBAR_BUILD}
     ports:
       - ${TRAMBAR_HTTP_PORT}:80
-<%=(ssl ? '' : '#') %>      - ${TRAMBAR_HTTPS_PORT}:443
+      # set HTTPS port
+      <%=(ssl ? '' : '#')%>- ${TRAMBAR_HTTPS_PORT}:443
     volumes:
-      - .:/etc/nginx/extra
+      # mount directory for additional config files
+      - ./extra:/etc/nginx/extra
+      # mount directory for media files
       - ${TRAMBAR_MEDIA_FOLDER}:/var/cache/media:z
-<%=(ssl ? '' : '#') %>      - ${TRAMBAR_SSL_FOLDER}:${TRAMBAR_SSL_FOLDER}
+      # mount directory containing SSL cert and key
+      <%=(ssl && !certbot ? '' : '#')%>- ${TRAMBAR_SSL_FOLDER}:${TRAMBAR_SSL_FOLDER}
+      # mount volume for holding Certbot cert and key
+      <%=(certbot ? '' : '#')%>- /etc/letsencrypt
+    environment:
+      # set domain name
+      <%=(ssl ? '' : '#')%>- DOMAIN=${TRAMBAR_SSL_DOMAIN}
+      # set paths to cert and private key
+      <%=(ssl && !certbot ? '' : '#')%>- CERT_PATH=${TRAMBAR_SSL_CERT}
+      <%=(ssl && !certbot ? '' : '#')%>- KEY_PATH=${TRAMBAR_SSL_KEY}
+      # set contact e-mail (for Certbot)
+      <%=(certbot ? '' : '#')%>- EMAIL=${TRAMBAR_SSL_EMAIL}
     depends_on:
       - data_server
       - event_notifier
@@ -19,8 +36,10 @@ services:
     restart: always
     image: trambar/trambar-postgres:${TRAMBAR_BUILD}
     volumes:
+      # mount directory for database
       - ${TRAMBAR_DATABASE_FOLDER}:/var/lib/postgresql/data:Z
     environment:
+      # set PostgreSQL root credentials
       - POSTGRES_DB=${TRAMBAR_DATABASE_NAME}
       - POSTGRES_USER=root
       - POSTGRES_PASSWORD=${TRAMBAR_DATABASE_ROOT_PASSWORD}
@@ -28,8 +47,10 @@ services:
     restart: always
     image: trambar/trambar-node:${TRAMBAR_BUILD}
     environment:
+      # set Node.js include paths
       - NODE_PATH=/opt/trambar/backend/node_modules:/opt/trambar/backend/src:/opt/trambar/backend/src/lib:/opt/trambar/common/src
       - NODE_ENV=production
+      # set PostgreSQL database name and credentials
       - POSTGRES_HOST=postgres
       - POSTGRES_DB=${TRAMBAR_DATABASE_NAME}
       - POSTGRES_USER=root
