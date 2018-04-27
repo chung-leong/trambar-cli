@@ -13,13 +13,13 @@ services:
       <%=(ssl ? '' : '#')%>- ${TRAMBAR_HTTPS_PORT}:443
     volumes:
       # mount directory for additional config files
-      - ./extra:/etc/nginx/extra
+      - ${TRAMBAR_EXTRA_FOLDER}:/etc/nginx/extra
       # mount directory for media files
       - ${TRAMBAR_MEDIA_FOLDER}:/var/cache/media:z
       # mount directory containing SSL cert and key
       <%=(ssl && !certbot ? '' : '#')%>- ${TRAMBAR_SSL_FOLDER}:${TRAMBAR_SSL_FOLDER}
       # mount volume for holding Certbot cert and key
-      <%=(certbot ? '' : '#')%>- /etc/letsencrypt
+      <%=(certbot ? '' : '#')%>- ${TRAMBAR_SSL_FOLDER}:/etc/letsencrypt
     environment:
       # set domain name
       <%=(ssl ? '' : '#')%>- DOMAIN=${TRAMBAR_SSL_DOMAIN}

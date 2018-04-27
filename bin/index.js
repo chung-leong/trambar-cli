@@ -652,6 +652,7 @@ function createConfiguration() {
             config.server_name = promptForText(`Server domain name:`);
             if (config.certbot) {
                 config.contact_email = promptForText(`Contact e-mail:`);
+                config.ssl_folder = './certbot';
             } else {
                 config.cert_path = promptForPath(`Full path of certificate:`);
                 config.key_path = promptForPath(`Full path of private key:`);
