@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 var _ = require('lodash');
+var OS = require('os');
 var FS = require('fs'); FS.mkdirpSync = require('mkdirp').sync;
 var Path = require('path');
 var ChildProcess = require('child_process');
@@ -12,12 +13,26 @@ var ReadlineSync = require('readline-sync');
 var IsRoot = require('is-root');
 var CommonDir = require('commondir');
 
-var certbotLivePath = '/etc/letsencrypt/live';
-
-var defaultConfigFolder = '/etc/trambar';
 var defaultPrefix = 'trambar';
 var defaultPassword = 'password';
 var defaultBuild = 'latest';
+
+var defaultConfigFolder;
+var defaultDatabaseFolder;
+var defaultMediaFolder;
+
+switch (OS.type()) {
+    case 'Windows_NT':
+        var home = _.replace(process.env.USERPROFILE, /\\/g, '/');
+        defaultConfigFolder = `${home}/Trambar`;
+        defaultDatabaseFolder = '';
+        defaultMediaFolder = '';
+        break;
+    default:
+        defaultConfigFolder = '/etc/trambar';
+        defaultDatabaseFolder = '/srv/trambar/postgres';
+        defaultMediaFolder = '/srv/trambar/media';
+}
 
 var optionDefinitions = [
     {
@@ -185,6 +200,9 @@ function install() {
     if (!installDockerCompose()) {
         return false;
     }
+    if (!checkDockerAccess()) {
+        return false;
+    }
     if (!pullImages()) {
         return false;
     }
@@ -315,26 +333,30 @@ function installDocker() {
     if (isInstalled('docker')) {
         return true;
     }
-    if (!confirm('Docker is not installed on this system. Do you want to install it? [Y/n]')) {
-        return false;
-    }
-    if (isInstalled('apt-get')) {
-        return run('apt-get -y install docker.io');
-    } else if (isInstalled('pacman')) {
-        return run('pacman --noconfirm -S docker')
-            && run('systemctl enable docker')
-            && run('systemctl start docker');
-    } else if (isInstalled('yum')) {
-        return run('yum -y install docker')
-            && run('systemctl enable docker')
-            && run('systemctl start docker');
-    } else if (isInstalled('urpmi')) {
-        return run('urpmi --auto docker')
-            && run('systemctl enable docker')
-            && run('systemctl start docker');
-    } else {
-        console.log('Unable to find suitable package manager');
-        return false;
+    switch (OS.type()) {
+        case 'Linux':
+            if (!confirm('Docker is not installed on this system. Do you want to install it? [Y/n]')) {
+                return false;
+            }
+            if (isInstalled('apt-get')) {
+                return run('apt-get -y install docker.io');
+            } else if (isInstalled('pacman')) {
+                return run('pacman --noconfirm -S docker')
+                    && run('systemctl enable docker')
+                    && run('systemctl start docker');
+            } else if (isInstalled('yum')) {
+                return run('yum -y install docker')
+                    && run('systemctl enable docker')
+                    && run('systemctl start docker');
+            } else if (isInstalled('urpmi')) {
+                return run('urpmi --auto docker')
+                    && run('systemctl enable docker')
+                    && run('systemctl start docker');
+            }
+        default:
+            var url = 'https://www.docker.com/get-docker';
+            console.log(`You must install Docker manually (${url})`);
+            return false;
     }
 }
 
@@ -342,23 +364,27 @@ function installDockerCompose() {
     if (isInstalled('docker-compose')) {
         return true;
     }
-    if (!confirm('Docker Compose is not installed on this system. Do you want to install it? [Y/n]')) {
-        return false;
-    }
-    if (isInstalled('apt-get')) {
-        return run('apt-get -y install docker-compose');
-    } else if (isInstalled('pacman')) {
-        return run('pacman --noconfirm -S docker-compose');
-    } else if (isInstalled('yum')) {
-        return run('yum -y install epel-release')
-            && run('yum -y install python-pip')
-            && run('pip install docker-compose')
-            && run('yum -y upgrade python*');
-    } else if (isInstalled('urpmi')) {
-        return run('urpmi --auto docker-compose');
-    } else {
-        console.log('Unable to find suitable package manager');
-        return false;
+    switch (OS.type()) {
+        case 'Linux':
+            if (!confirm('Docker Compose is not installed on this system. Do you want to install it? [Y/n]')) {
+                return false;
+            }
+            if (isInstalled('apt-get')) {
+                return run('apt-get -y install docker-compose');
+            } else if (isInstalled('pacman')) {
+                return run('pacman --noconfirm -S docker-compose');
+            } else if (isInstalled('yum')) {
+                return run('yum -y install epel-release')
+                    && run('yum -y install python-pip')
+                    && run('pip install docker-compose')
+                    && run('yum -y upgrade python*');
+            } else if (isInstalled('urpmi')) {
+                return run('urpmi --auto docker-compose');
+            }
+        default:
+            var url = 'https://www.docker.com/get-docker';
+            console.log(`You must install Docker Compose manually (${url})`);
+            return false;
     }
 }
 
@@ -507,26 +533,13 @@ function promptForPort(question, def) {
 
 function checkPort(port) {
     try {
-        var cmd = 'netstat';
-        var args = [ '-tulpen' ];
-        var options = {
-            stdio: [ 'pipe', 'pipe', 'ignore' ]
-        };
-        var stdout = ChildProcess.execFileSync(cmd, args, options);
-        var text = stdout.toString('utf-8');
-        var lines = _.split(text, /[\r\n]/);
-        var busy = _.some(lines, (line) => {
-            if (/LISTEN/.test(line)) {
-                if ((new RegExp(`:${port}\\b`)).test(line)) {
-                    return true;
-                }
-            }
-        });
-        return !busy;
+        var cmd = process.argv[0];
+        var args = [ `${__dirname}/check-port.js`, port ];
+        ChildProcess.execFileSync(cmd, args);
+        return true;
     } catch (err) {
-        console.error(err);
+        return false;
     }
-    return true;
 }
 
 function isRunning() {
@@ -535,11 +548,17 @@ function isRunning() {
 }
 
 function checkRootAccess() {
-    if (!IsRoot()) {
-        console.log('Root access required');
-        return false;
+    switch (OS.type()) {
+        case 'Linux':
+            if (!IsRoot()) {
+                console.log('Root access required');
+                return false;
+            }
+            return true;
+        default:
+            return true;
+
     }
-    return true;
 }
 
 function checkDockerAccess() {
@@ -554,7 +573,21 @@ function checkDockerAccess() {
         if (!isInstalled('docker')) {
             console.log('Docker is not installed');
         } else {
-            console.log('Root access required');
+            switch (OS.type()) {
+                case 'Linux':
+                    if (!IsRoot()) {
+                        console.log('Root access required');
+                    } else {
+                        console.log(err.message);
+                    }
+                    break;
+                case 'Windows_NT':
+                case 'Darwin':
+                    console.log(err.message);
+                    console.log('\n');
+                    console.log('Is Docker Machine running?');
+                    break;
+            }
         }
         return false;
     }
@@ -644,7 +677,10 @@ function createConfiguration() {
             cert_path: '',
             key_path: '',
             ssl_folder: '',
-            build,
+            database_folder: defaultDatabaseFolder,
+            media_folder: defaultMediaFolder,
+            volumes: !defaultDatabaseFolder || !defaultMediaFolder,
+            build: build,
         };
         config.ssl = confirm(`Set up SSL? [Y/n]`, true);
         if (config.ssl) {

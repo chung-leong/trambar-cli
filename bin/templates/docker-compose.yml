@@ -15,19 +15,21 @@ services:
       # mount directory for additional config files
       - ${TRAMBAR_EXTRA_FOLDER}:/etc/nginx/extra
       # mount directory for media files
-      - ${TRAMBAR_MEDIA_FOLDER}:/var/cache/media:z
+      <%=(!volumes ? '' : '#')%>- ${TRAMBAR_MEDIA_FOLDER}:/var/cache/media:z
+      # using named volume for media files
+      <%=(volumes ? '' : '#')%>- media:/var/cache/media
       # mount directory containing SSL cert and key
       <%=(ssl && !certbot ? '' : '#')%>- ${TRAMBAR_SSL_FOLDER}:${TRAMBAR_SSL_FOLDER}
       # mount volume for holding Certbot cert and key
       <%=(certbot ? '' : '#')%>- ${TRAMBAR_SSL_FOLDER}:/etc/letsencrypt
-    environment:
+    <%=(ssl ? '' : '#')%>environment:
       # set domain name
       <%=(ssl ? '' : '#')%>- DOMAIN=${TRAMBAR_SSL_DOMAIN}
       # set paths to cert and private key
       <%=(ssl && !certbot ? '' : '#')%>- CERT_PATH=${TRAMBAR_SSL_CERT}
       <%=(ssl && !certbot ? '' : '#')%>- KEY_PATH=${TRAMBAR_SSL_KEY}
       # set contact e-mail (for Certbot)
-      <%=(certbot ? '' : '#')%>- EMAIL=${TRAMBAR_SSL_EMAIL}
+      <%=(ssl && certbot ? '' : '#')%>- EMAIL=${TRAMBAR_SSL_EMAIL}
     depends_on:
       - data_server
       - event_notifier
@@ -37,7 +39,9 @@ services:
     image: trambar/trambar-postgres:${TRAMBAR_BUILD}
     volumes:
       # mount directory for database
-      - ${TRAMBAR_DATABASE_FOLDER}:/var/lib/postgresql/data:Z
+      <%=(!volumes ? '' : '#')%>- ${TRAMBAR_DATABASE_FOLDER}:/var/lib/postgresql/data:Z
+      # using named volume for database
+      <%=(volumes ? '' : '#')%>- database:/var/lib/postgresql/data
     environment:
       # set PostgreSQL root credentials
       - POSTGRES_DB=${TRAMBAR_DATABASE_NAME}
@@ -111,7 +115,10 @@ services:
     restart: always
     image: trambar/trambar-node:${TRAMBAR_BUILD}
     volumes:
-      - ${TRAMBAR_MEDIA_FOLDER}:/var/cache/media:z
+      # mount directory for media files
+      <%=(!volumes ? '' : '#')%>- ${TRAMBAR_MEDIA_FOLDER}:/var/cache/media:z
+      # using named volume for media files
+      <%=(volumes ? '' : '#')%>- media:/var/cache/media
     environment:
       - NODE_PATH=/opt/trambar/backend/node_modules:/opt/trambar/backend/src:/opt/trambar/backend/src/lib:/opt/trambar/common/src
       - NODE_ENV=production
@@ -178,3 +185,6 @@ services:
     command: [ node, gitlab-adapter.js ]
     depends_on:
       - postgres
+<%=(volumes ? '' : '#')%>volumes:
+    <%=(volumes ? '' : '#')%>database: {}
+    <%=(volumes ? '' : '#')%>media: {}
