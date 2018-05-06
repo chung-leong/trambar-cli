@@ -22,16 +22,26 @@ var defaultDatabaseFolder;
 var defaultMediaFolder;
 
 switch (OS.type()) {
+    case 'Linux':
+        defaultConfigFolder = '/etc/trambar';
+        defaultDatabaseFolder = '/srv/trambar/postgres';
+        defaultMediaFolder = '/srv/trambar/media';
+        break;
     case 'Windows_NT':
         var home = _.replace(process.env.USERPROFILE, /\\/g, '/');
         defaultConfigFolder = `${home}/Trambar`;
         defaultDatabaseFolder = '';
         defaultMediaFolder = '';
         break;
+    case 'Darwin':
+        var home = process.env.HOME;
+        defaultConfigFolder = `${home}/Trambar`;
+        defaultDatabaseFolder = '';
+        defaultMediaFolder = '';
+        break;
     default:
-        defaultConfigFolder = '/etc/trambar';
-        defaultDatabaseFolder = '/srv/trambar/postgres';
-        defaultMediaFolder = '/srv/trambar/media';
+        console.log('Unsupported operation system', OS.type());
+        process.exit(-1);
 }
 
 var optionDefinitions = [
@@ -248,7 +258,7 @@ function showLogs() {
         return false;
     }
     process.chdir(configFolder);
-    return run('docker-compose', [ '-p', prefix, 'logs' ]);
+    return run('docker-compose', [ '-p', prefix, 'logs', '-f' ]);
     return true;
 }
 
@@ -523,23 +533,8 @@ function promptForPort(question, def) {
                 port = undefined;
             }
         }
-        if (!checkPort(port)) {
-            console.error(`Port is in use: ${port}`);
-            port = undefined;
-        }
     } while(port === undefined)
     return port;
-}
-
-function checkPort(port) {
-    try {
-        var cmd = process.argv[0];
-        var args = [ `${__dirname}/check-port.js`, port ];
-        ChildProcess.execFileSync(cmd, args);
-        return true;
-    } catch (err) {
-        return false;
-    }
 }
 
 function isRunning() {
@@ -583,8 +578,8 @@ function checkDockerAccess() {
                     break;
                 case 'Windows_NT':
                 case 'Darwin':
+                console.error(err);
                     console.log(err.message);
-                    console.log('\n');
                     console.log('Is Docker Machine running?');
                     break;
             }
@@ -682,7 +677,11 @@ function createConfiguration() {
             volumes: !defaultDatabaseFolder || !defaultMediaFolder,
             build: build,
         };
-        config.ssl = confirm(`Set up SSL? [Y/n]`, true);
+        if (OS.type() === 'Linux') {
+            config.ssl = confirm(`Set up SSL? [Y/n]`, true);
+        } else {
+            config.ssl = confirm(`Set up SSL? [y/N]`, false);
+        }
         if (config.ssl) {
             config.certbot = confirm(`Use certbot (https://certbot.eff.org/)? [Y/n]`, true);
             config.server_name = promptForText(`Server domain name:`);
@@ -705,7 +704,11 @@ function createConfiguration() {
             }
             config.https_port = promptForPort(`HTTPS port [443]:`, 443);
         }
-        config.http_port = promptForPort(`HTTP port [80]:`, 80);
+        if (OS.type() === 'Linux') {
+            config.http_port = promptForPort(`HTTP port [80]:`, 80);
+        } else {
+            config.http_port = promptForPort(`HTTP port [8080]:`, 8080);
+        }
         config.password = _.map([ 1, 2, 3, 4], () => {
             return Crypto.randomBytes(16).toString('hex');
         });
