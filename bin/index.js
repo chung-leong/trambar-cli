@@ -345,7 +345,7 @@ function installDocker() {
     }
     switch (OS.type()) {
         case 'Linux':
-            if (!confirm('Docker is not installed on this system. Do you want to install it? [Y/n]')) {
+            if (!confirm('Docker is not installed on this system. Do you want to install it?', true)) {
                 return false;
             }
             if (isInstalled('apt-get')) {
@@ -376,7 +376,7 @@ function installDockerCompose() {
     }
     switch (OS.type()) {
         case 'Linux':
-            if (!confirm('Docker Compose is not installed on this system. Do you want to install it? [Y/n]')) {
+            if (!confirm('Docker Compose is not installed on this system. Do you want to install it?')) {
                 return false;
             }
             if (isInstalled('apt-get')) {
@@ -439,16 +439,14 @@ function restartContainers() {
 }
 
 function confirm(question, def) {
-    var confirmed;
-    if (def === undefined) {
-        def = true;
-    }
+    var prompt = attachDefault(question, def) + ' ';
     if (options.yes) {
-        console.log(question);
+        console.log(prompt + ' Y');
         return true;
     }
+    var confirmed;
     do {
-        var answer = _.trim(ReadlineSync.question(question + ' '));
+        var answer = _.trim(ReadlineSync.question(prompt));
         if (!answer) {
             confirmed = def;
         } else if (/^y/i.test(answer)) {
@@ -461,13 +459,14 @@ function confirm(question, def) {
 }
 
 function promptForPassword(question, def) {
-    var password;
+    var prompt = attachDefault(question, def) + ' ';
     if (options.yes) {
-        console.log(question);
+        console.log(prompt);
         return def;
     }
+    var password;
     do {
-        var answer = _.trim(ReadlineSync.question(question + ' ', { hideEchoBack: true }));
+        var answer = _.trim(ReadlineSync.question(prompt, { hideEchoBack: true }));
         if (!answer) {
             password = def;
         } else {
@@ -478,13 +477,14 @@ function promptForPassword(question, def) {
 }
 
 function promptForText(question, def) {
+    var prompt = attachDefault(question, def) + ' ';
     var text;
     if (options.yes) {
-        console.log(question);
+        console.log(prompt + def);
         return def;
     }
     do {
-        var answer = _.trim(ReadlineSync.question(question + ' '));
+        var answer = _.trim(ReadlineSync.question(prompt));
         if (!answer) {
             text = def;
         } else {
@@ -495,13 +495,14 @@ function promptForText(question, def) {
 }
 
 function promptForPath(question, def) {
-    var path;
+    var prompt = attachDefault(question, def) + ' ';
     if (options.yes) {
-        console.log(question);
+        console.log(prompt);
         return def;
     }
+    var path;
     do {
-        var answer = _.trim(ReadlineSync.question(question + ' '));
+        var answer = _.trim(ReadlineSync.question(prompt));
         if (!answer) {
             path = def;
         } else {
@@ -518,13 +519,14 @@ function promptForPath(question, def) {
 }
 
 function promptForPort(question, def) {
-    var port;
+    var prompt = attachDefault(question, def) + ' ';
     if (options.yes) {
-        console.log(question);
+        console.log(prompt + def);
         return def;
     }
+    var port;
     do {
-        var answer = _.trim(ReadlineSync.question(question + ' '));
+        var answer = _.trim(ReadlineSync.question(prompt));
         if (!answer) {
             port = def;
         } else {
@@ -535,6 +537,23 @@ function promptForPort(question, def) {
         }
     } while(port === undefined)
     return port;
+}
+
+function attachDefault(question, def) {
+    switch (typeof(def)) {
+        case 'boolean':
+            question += (def) ? ` [Y/n]` : ` [y/N]`;
+            break;
+        case 'number':
+            question += ` [${def}]`;
+            break;
+        case 'string':
+            if (def) {
+                question += ` [${def}]`;
+            }
+            break;
+    }
+    return question;
 }
 
 function isRunning() {
@@ -662,13 +681,15 @@ function removeImage(id) {
 
 function createConfiguration() {
     try {
+        var public = isPublicServer();
         var config = {
-            ssl: false,
-            certbot: false,
-            server_name: '',
+            ssl: true,
+            certbot: (public) ? true : false,
+            snakeoil: (public) ? false : true,
+            server_name: (public) ? '' : OS.hostname(),
             contact_email: '',
-            http_port: 80,
-            https_port: 443,
+            http_port: (public) ? 80 : 8080,
+            https_port: (public) ? 443 : 8443,
             cert_path: '',
             key_path: '',
             ssl_folder: '',
@@ -677,43 +698,48 @@ function createConfiguration() {
             volumes: !defaultDatabaseFolder || !defaultMediaFolder,
             build: build,
         };
-        if (OS.type() === 'Linux') {
-            config.ssl = confirm(`Set up SSL? [Y/n]`, true);
-        } else {
-            config.ssl = confirm(`Set up SSL? [y/N]`, false);
-        }
+        config.ssl = confirm(`Set up SSL?`, config.ssl);
         if (config.ssl) {
-            config.certbot = confirm(`Use certbot (https://certbot.eff.org/)? [Y/n]`, true);
-            config.server_name = promptForText(`Server domain name:`);
+            config.certbot = confirm(`Use certbot (https://certbot.eff.org/)?`, config.certbot);
             if (config.certbot) {
+                config.server_name = promptForText(`Server domain name:`, config.server_name);
                 config.contact_email = promptForText(`Contact e-mail:`);
                 config.ssl_folder = './certbot';
+                config.snakeoil = false;
             } else {
-                config.cert_path = promptForPath(`Full path of certificate:`);
-                config.key_path = promptForPath(`Full path of private key:`);
-                config.ssl_folder = CommonDir([
-                    config.cert_path,
-                    config.key_path,
-                    FS.realpathSync(config.cert_path),
-                    FS.realpathSync(config.key_path),
-                ]);
-                if (/^\/[^\/]+$/.test(config.ssl_folder)) {
-                    console.error('Certificate location requires mounting of root level folder');
-                    process.exit(-1);
+                config.snakeoil = confirm(`Use self-signed SSL certificate?`, config.snakeoil);
+                config.server_name = promptForText(`Server domain name:`, config.server_name);
+                if (config.snakeoil) {
+                    config.ssl_folder = `${configFolder}/certs`;
+                    config.cert_path = `${config.ssl_folder}/snakeoil.crt`;
+                    config.key_path = `${config.ssl_folder}/snakeoil.key`;
+                } else {
+                    config.cert_path = promptForPath(`Full path of certificate:`);
+                    config.key_path = promptForPath(`Full path of private key:`);
+                    config.ssl_folder = CommonDir([
+                        config.cert_path,
+                        config.key_path,
+                        FS.realpathSync(config.cert_path),
+                        FS.realpathSync(config.key_path),
+                    ]);
+                    if (/^\/[^\/]+$/.test(config.ssl_folder)) {
+                        console.error('Certificate location requires mounting of root level folder');
+                        process.exit(-1);
+                    }
                 }
             }
-            config.https_port = promptForPort(`HTTPS port [443]:`, 443);
+            config.https_port = promptForPort(`HTTPS port:`, config.https_port);
         }
-        if (OS.type() === 'Linux') {
-            config.http_port = promptForPort(`HTTP port [80]:`, 80);
-        } else {
-            config.http_port = promptForPort(`HTTP port [8080]:`, 8080);
-        }
+        config.http_port = promptForPort(`HTTP port:`, config.http_port);
         config.password = _.map([ 1, 2, 3, 4], () => {
             return Crypto.randomBytes(16).toString('hex');
         });
-        var password = promptForPassword(`Password for Trambar root account [${defaultPassword}]:`, defaultPassword);
+        var password = promptForPassword(`Password for Trambar root account:`, defaultPassword);
 
+        if (config.snakeoil) {
+            createConfigFile(config.cert_path, 'snakeoil.crt', {});
+            createConfigFile(config.key_path, 'snakeoil.key', {});
+        }
         createConfigFile(`${configFolder}/docker-compose.yml`, 'docker-compose.yml', config);
         createConfigFile(`${configFolder}/.env`, 'env', config, 0600);
         savePassword(password);
@@ -726,7 +752,7 @@ function createConfiguration() {
 
 function createConfigFile(path, name, config, mode) {
     if (FS.existsSync(path)) {
-        if (!confirm(`Overwrite ${path}? [y/N]`, false)) {
+        if (!confirm(`Overwrite ${path}?`, false)) {
             return;
         }
     }
@@ -754,7 +780,7 @@ function savePassword(password) {
     var text = `root:${hash}\n`;
     var path = `${configFolder}/trambar.htpasswd`;
     if (FS.existsSync(path)) {
-        if (!confirm(`Overwrite ${path}? [y/N]`, false)) {
+        if (!confirm(`Overwrite ${path}?`, false)) {
             return;
         }
     }
@@ -835,4 +861,22 @@ function getPackage() {
     var text = FS.readFileSync(`${__dirname}/../package.json`, 'utf-8');
     var json = JSON.parse(text);
     return json;
+}
+
+function isPublicServer() {
+    var devices = OS.networkInterfaces();
+    return _.some(devices, (interfaces, name) => {
+        return _.some(interfaces, (interface) => {
+            if (!interface.internal) {
+                if (interface.family === 'IPv4') {
+                    if (/^192\.168\./.test(interface.address)) {
+                        return false;
+                    } else if (/^169\.254\./.test(interface.address)) {
+                        return false;
+                    }
+                    return true;
+                }
+            }
+        });
+    });
 }
