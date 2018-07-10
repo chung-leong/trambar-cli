@@ -376,7 +376,7 @@ function installDockerCompose() {
     }
     switch (OS.type()) {
         case 'Linux':
-            if (!confirm('Docker Compose is not installed on this system. Do you want to install it?')) {
+            if (!confirm('Docker Compose is not installed on this system. Do you want to install it?', true)) {
                 return false;
             }
             if (isInstalled('apt-get')) {
