@@ -1,5 +1,5 @@
 {
-  "name": "trambar",
+  "name": "trambar-cli",
   "version": "1.0.10",
   "description": "A utility for installing and managing a Trambar server",
   "bin": "bin/index.js",
@@ -8,11 +8,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git@github.com:chung-leong/trambar-cli.git"
+    "url": "git@github.com:trambarhq/trambar-cli.git"
   },
   "author": "Chung Leong",
   "license": "MIT",
-  "homepage": "https://github.com/chung-leong/trambar",
+  "homepage": "https://github.com/trambarhq/trambar-cli",
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "command-line-args": "^4.0.7",
