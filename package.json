@@ -1,5 +1,5 @@
 {
-  "name": "trambar-cli",
+  "name": "trambar",
   "version": "1.0.11",
   "description": "A utility for installing and managing a Trambar server",
   "bin": "bin/index.js",
