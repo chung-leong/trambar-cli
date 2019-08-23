@@ -1,0 +1,12 @@
+version: "2"
+services:
+  node:
+    restart: always
+    image: trambar/trambar-node:${TRAMBAR_BUILD}
+    environment:
+      - NODE_ENV=production
+      # set PostgreSQL database name and credentials
+      - POSTGRES_HOST=postgres
+      - POSTGRES_DB=${TRAMBAR_DATABASE_NAME}
+      - POSTGRES_USER=client_role
+      - POSTGRES_PASSWORD=${TRAMBAR_DATABASE_CLIENT_PASSWORD}

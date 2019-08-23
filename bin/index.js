@@ -64,6 +64,12 @@ var optionDefinitions = [
         description: `Specify config directory (default: ${defaultConfigFolder})`
     },
     {
+        name: 'debug',
+        type: String,
+        description: `Start service in debugger`,
+        development: true,
+    },
+    {
         name: 'help',
         alias: 'h',
         type: Boolean,
@@ -112,9 +118,23 @@ var scriptDescription = [
     {
         header: 'Options',
         optionList: _.filter(optionDefinitions, (def) => {
-            return !def.defaultOption;
+            return !def.defaultOption && !def.development;
         })
-    }
+    },
+    {
+        header: 'Development commands',
+        content: [
+            { name: 'config-dev', summary: 'Configure development server' },
+            { name: 'start-dev', summary: 'Start development server' },
+            { name: 'stop-dev', summary: 'Stop development server' },
+        ]
+    },
+    {
+        header: 'Development options',
+        optionList: _.filter(optionDefinitions, (def) => {
+            return def.development;
+        })
+    },
 ];
 
 var options = CommandLineArgs(optionDefinitions);
@@ -161,6 +181,12 @@ function runCommand(command) {
             return update();
         case 'uninstall':
             return uninstall();
+        case 'start-dev':
+            return startDev();
+        case 'stop-dev':
+            return stopDev();
+        case 'config-dev':
+            return configDev();
         default:
             console.log(`Unknown command: ${command}`);
             return false;
@@ -191,7 +217,7 @@ function setPassword() {
         return false;
     }
     var password = promptForPassword('Password:');
-    if (!savePassword(password)) {
+    if (!savePassword(`${configFolder}/trambar.htpasswd`, password)) {
         return false;
     }
     return true;
@@ -239,7 +265,7 @@ function showStats() {
     if (!checkDockerAccess()) {
         return false;
     }
-    var processes = getProcesses();
+    var processes = getProcesses(/^trambar\//);
     if (_.isEmpty(processes)) {
         console.log('Trambar is not currently running');
         return false;
@@ -330,6 +356,61 @@ function uninstall() {
     if (!removeImages()) {
         return false;
     }
+    return true;
+}
+
+function startDev() {
+    if (!checkDockerAccess()) {
+        return false;
+    }
+    if (!checkDevConfiguration()) {
+        return false;
+    }
+    if (!createDevContainers()) {
+        return false;
+    }
+    return true;
+}
+
+function stopDev() {
+    if (!checkDockerAccess()) {
+        return false;
+    }
+    if (!checkDevConfiguration()) {
+        return false;
+    }
+    if (!isRunningDev()) {
+        console.log('Development server is not currently running');
+        return false;
+    }
+    if (!destroyDevContainers()) {
+        return false;
+    }
+    return true;
+}
+
+function configDev() {
+    if (!checkRootAccess()) {
+        return false;
+    }
+    if (!createDevConfiguration()) {
+        return false;
+    }
+    if (!installDocker()) {
+        return false;
+    }
+    if (!installDockerCompose()) {
+        return false;
+    }
+    if (!checkDockerAccess()) {
+        return false;
+    }
+    if (!pullDevImages()) {
+        return false;
+    }
+    console.log('');
+    console.log(`Configuration complete`);
+    console.log(`Run "${getScriptName()} start-dev" to start development server`);
     return true;
 }
 
@@ -557,7 +638,7 @@ function attachDefault(question, def) {
 }
 
 function isRunning() {
-    var processes = getProcesses();
+    var processes = getProcesses(/^trambar\//);
     return !_.isEmpty(processes);
 }
 
@@ -625,7 +706,7 @@ function checkFileExistence(path) {
     return true;
 }
 
-function getProcesses(options) {
+function getProcesses(regExp) {
     var cmd = 'docker';
     var args = [ 'ps', '--format={ "Image": {{json .Image}}, "Names": {{json .Names}}, "ID": {{json .ID }} }' ];
     try {
@@ -635,7 +716,7 @@ function getProcesses(options) {
             return list;
         } else {
             return _.filter(list, (p) => {
-                if (/^trambar\//.test(p.Image)) {
+                if (regExp.test(p.Image)) {
                     return true;
                 }
             });
@@ -741,8 +822,11 @@ function createConfiguration() {
             createConfigFile(config.key_path, 'snakeoil.key', {});
         }
         createConfigFile(`${configFolder}/docker-compose.yml`, 'docker-compose.yml', config);
+        createConfigFile(`${configFolder}/nginx.yml`, 'nginx.yml', config);
+        createConfigFile(`${configFolder}/node.yml`, 'node.yml', config);
+        createConfigFile(`${configFolder}/postgres.yml`, 'postgres.yml', config);
         createConfigFile(`${configFolder}/.env`, 'env', config, 0600);
-        savePassword(password);
+        savePassword(`${configFolder}/trambar.htpasswd`, password);
         return true;
     } catch (err) {
         console.error(err.message);
@@ -770,7 +854,7 @@ function createConfigFile(path, name, config, mode) {
     }
 }
 
-function savePassword(password) {
+function savePassword(path, password) {
     if (!password) {
         return false;
     }
@@ -778,7 +862,6 @@ function savePassword(password) {
     // Bcrypt hash made by htpasswd has the prefix $2y$ instead of $2a$
     hash = '$2y$' + hash.substring(4);
     var text = `root:${hash}\n`;
-    var path = `${configFolder}/trambar.htpasswd`;
     if (FS.existsSync(path)) {
         if (!confirm(`Overwrite ${path}?`, false)) {
             return;
@@ -879,4 +962,61 @@ function isPublicServer() {
             }
         });
     });
+}
+
+function checkDevConfiguration() {
+    if (!checkFileExistence(`${configFolder}/dev/docker-compose.yml`)) {
+        return false;
+    }
+    if (!checkFileExistence(`${configFolder}/dev/.env`)) {
+        return false;
+    }
+    return true;
+}
+
+function createDevConfiguration() {
+    try {
+        var config = {
+            ssl: true,
+            certbot: false,
+            snakeoil: true,
+            server_name: 'localhost',
+            contact_email: '',
+            http_port: 80,
+            https_port: 443,
+            cert_path: '',
+            key_path: '',
+            ssl_folder: '',
+            database_folder: defaultDatabaseFolder,
+            media_folder: defaultMediaFolder,
+            source_folder: defaultSourceFolder,
+            volumes: !defaultDatabaseFolder || !defaultMediaFolder,
+            build: build,
+        };
+        config.source_folder = promptForText(`Trambar git working folder:`, config.source_folder);
+        var password = promptForPassword(`Password for Trambar root account:`, defaultPassword);
+        if (config.snakeoil) {
+            config.ssl_folder = `${configFolder}/dev/certs`;
+            config.cert_path = `${config.ssl_folder}/snakeoil.crt`;
+            config.key_path = `${config.ssl_folder}/snakeoil.key`;
+            createConfigFile(config.cert_path, 'snakeoil.crt', {});
+            createConfigFile(config.key_path, 'snakeoil.key', {});
+        }
+        createConfigFile(`${configFolder}/dev/docker-compose.yml`, 'dev/docker-compose.yml', config);
+        createConfigFile(`${configFolder}/dev/nginx.yml`, 'dev/nginx.yml', config);
+        createConfigFile(`${configFolder}/dev/node.yml`, 'dev/node.yml', config);
+        createConfigFile(`${configFolder}/dev/postgres.yml`, 'dev/postgres.yml', config);
+        createConfigFile(`${configFolder}/dev/.env`, '/dev/env', config, 0600);
+        createConfigFile(`${configFolder}/dev/conf.d/default.conf`, 'dev/default.conf', config);
+        savePassword(`${configFolder}/dev/trambar.htpasswd`, password);
+        return true;
+    } catch (err) {
+        console.error(err.message);
+        return false;
+    }
+}
+
+function isRunningDev() {
+    var processes = getProcesses(/^dev-\//);
+    return !_.isEmpty(processes);
 }

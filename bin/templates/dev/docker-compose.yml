@@ -1,37 +1,62 @@
 version: "2"
+volumes:
+  web_cache:
 services:
   nginx:                        # Nginx web server
     extends: { file: nginx.yml, service: nginx }
+    volumes:
+      - web_cache:/var/cache/nginx
     depends_on:
       - data_server
+      - admin_data_server
+      - media_server
       - event_notifier
+      - www_handler
   postgres:                     # PostgreSQL database manager
     extends: { file: postgres.yml, service: postgres }
-  schema_manager:               # Database schema manager (Node.js)
-    extends: { file: node.yml, service: node }
+  schema_manager:               # Database schema manager
+    extends:
+      file: node.yml
+      service: node
     environment:
-      - NODE_ENV=production
       - POSTGRES_USER=root
       - POSTGRES_PASSWORD=${TRAMBAR_DATABASE_ROOT_PASSWORD}
       - DATABASE_ADMIN_PASSWORD=${TRAMBAR_DATABASE_ADMIN_PASSWORD}
       - DATABASE_CLIENT_PASSWORD=${TRAMBAR_DATABASE_CLIENT_PASSWORD}
       - DATABASE_AUTH_PASSWORD=${TRAMBAR_DATABASE_AUTH_PASSWORD}
+    command: [ node, --experimental-modules, schema-manager.mjs ]
     depends_on:
       - postgres
-    command: [ node, --experimental-modules, schema-manager.js ]
+  webdav_server:                # WebDAV server
+    extends: { file: node.yml, service: node }
+    ports:
+      - 8000:8000
+    environment:
+      - POSTGRES_USER=root
+      - POSTGRES_PASSWORD=${TRAMBAR_DATABASE_ROOT_PASSWORD}
+    command: [ node, --experimental-modules, webdav-server.mjs ]
+    depends_on:
+      - postgres
+  www_handler:                  # Web page handler (Node.js)
+    extends: { file: node.yml, service: node }
+    volumes:
+      - web_cache:/var/cache/nginx
+    command: [ node, --experimental-modules, www-handler.mjs ]
+    depends_on:
+      - postgres
   data_server:                  # Data server (Node.js)
     extends: { file: node.yml, service: node }
+    command: [ node, --experimental-modules, data-server.mjs ]
     depends_on:
       - postgres
-    command: [ node, --experimental-modules, data-server.js ]
   admin_data_server:            # Admin data server (Node.js)
     extends: { file: node.yml, service: node }
     environment:
       - POSTGRES_USER=admin_role
       - POSTGRES_PASSWORD=${TRAMBAR_DATABASE_ADMIN_PASSWORD}
+    command: [ node, --experimental-modules, data-server.mjs ]
     depends_on:
       - postgres
-    command: [ node, --experimental-modules, data-server.js ]
   session_manager:              # Authentication manager (Node.js)
     extends: { file: node.yml, service: node }
     volumes:
@@ -40,36 +65,36 @@ services:
       - POSTGRES_USER=auth_role
       - POSTGRES_PASSWORD=${TRAMBAR_DATABASE_AUTH_PASSWORD}
       - HTPASSWD_PATH=/etc/trambar/${TRAMBAR_HTPASSWD_NAME}
+    command: [ node, --experimental-modules, session-manager.mjs ]
     depends_on:
       - postgres
-    command: [ node, --experimental-modules, session-manager.js ]
   media_server:                 # Media server (Node.js)
     extends: { file: node.yml, service: node }
     volumes:
-      - ${TRAMBAR_MEDIA_FOLDER}:/var/cache/media:z
+      - ${TRAMBAR_MEDIA_FOLDER}:/var/cache/media
+    command: [ node, --experimental-modules, media-server.mjs ]
     depends_on:
       - postgres
-    command: [ node, --experimental-modules, media-server.js ]
   event_notifier:               # WebSocket Notifier (Node.js)
     extends: { file: node.yml, service: node }
+    command: [ node, --experimental-modules, event-notifier.mjs ]
     depends_on:
       - postgres
-    command: [ node, --experimental-modules, event-notifier.js ]
   live_data_invalidator:        # Live Data Invalidator (Node.js)
     extends: { file: node.yml, service: node }
+    command: [ node, --experimental-modules, live-data-invalidator.mjs ]
     depends_on:
       - postgres
-    command: [ node, --experimental-modules, live-data-invalidator.js ]
   live_data_updater:            # Live Data Updater (Node.js)
     extends: { file: node.yml, service: node }
+    command: [ node, --experimental-modules, live-data-updater.mjs ]
     depends_on:
       - postgres
-    command: [ node, --experimental-modules, live-data-updater.js ]
   gitlab_adapter:               # GitLab Adapter (Node.js)
     extends: { file: node.yml, service: node }
     environment:
       - POSTGRES_USER=admin_role
       - POSTGRES_PASSWORD=${TRAMBAR_DATABASE_ADMIN_PASSWORD}
+    command: [ node, --experimental-modules, gitlab-adapter.mjs ]
     depends_on:
       - postgres
-    command: [ node, --experimental-modules, gitlab-adapter.js ]

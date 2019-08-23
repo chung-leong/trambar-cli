@@ -1,0 +1,14 @@
+version: "2"
+services:
+  nginx:
+    restart: always
+    image: trambar/trambar-nginx:${TRAMBAR_BUILD}
+    ports:
+      - ${TRAMBAR_HTTP_PORT}:80
+      # set HTTPS port
+      <%=(ssl ? '' : '#')%>- ${TRAMBAR_HTTPS_PORT}:443
+    volumes:
+      # mount directory containing SSL cert and key
+      <%=(ssl ? '' : '#')%>- ${TRAMBAR_SSL_FOLDER}:${TRAMBAR_SSL_FOLDER}
+      # mount directory for media files
+      - ${TRAMBAR_MEDIA_FOLDER}:/var/cache/media:z
