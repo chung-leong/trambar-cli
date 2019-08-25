@@ -1,4 +1,6 @@
 version: "2"
+volumes:
+  web_cache:
 services:
   nginx:                        # Nginx web server
     extends: { file: nginx.yml, service: nginx }

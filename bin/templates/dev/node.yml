@@ -1,7 +1,7 @@
 version: "2"
 services:
   node:
-    image: trambar-node-dev
+    image: trambar/trambar-node-dev:${TRAMBAR_BUILD}
     volumes:
       - ${TRAMBAR_SOURCE_FOLDER}/admin/www:/opt/trambar/admin/www
       - ${TRAMBAR_SOURCE_FOLDER}/backend/src:/opt/trambar/backend/src

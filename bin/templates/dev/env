@@ -1,11 +1,19 @@
-TRAMBAR_DOMAIN_NAME=localhost
-TRAMBAR_PROTOCOL=http
+TRAMBAR_BUILD=<%= build %>
 TRAMBAR_DATABASE_NAME=trambar
-TRAMBAR_DATABASE_FOLDER=/srv/trambar/postgres
-TRAMBAR_DATABASE_ROOT_PASSWORD=qwerty
-TRAMBAR_DATABASE_ADMIN_PASSWORD=123456
-TRAMBAR_DATABASE_CLIENT_PASSWORD=234567
-TRAMBAR_DATABASE_AUTH_PASSWORD=345678
-TRAMBAR_MEDIA_FOLDER=/srv/trambar/media
+<%=(!volumes ? '' : '#') %>TRAMBAR_DATABASE_FOLDER=<%= database_folder %>
+TRAMBAR_DATABASE_ROOT_PASSWORD=<%= password[0] %>
+TRAMBAR_DATABASE_ADMIN_PASSWORD=<%= password[1] %>
+TRAMBAR_DATABASE_CLIENT_PASSWORD=<%= password[2] %>
+TRAMBAR_DATABASE_AUTH_PASSWORD=<%= password[3] %>
+<%=(!volumes ? '' : '#') %>TRAMBAR_MEDIA_FOLDER=<%= media_folder %>
 TRAMBAR_HTPASSWD_FOLDER=./
 TRAMBAR_HTPASSWD_NAME=trambar.htpasswd
+TRAMBAR_EXTRA_FOLDER=./extra
+TRAMBAR_HTTP_PORT=<%= http_port %>
+<%=(ssl ? '' : '#') %>TRAMBAR_HTTPS_PORT=<%= https_port %>
+<%=(ssl ? '' : '#') %>TRAMBAR_SSL_DOMAIN=<%= server_name %>
+<%=(ssl ? '' : '#') %>TRAMBAR_SSL_FOLDER=<%= ssl_folder %>
+<%=(ssl && !certbot ? '' : '#') %>TRAMBAR_SSL_CERT=<%= cert_path %>
+<%=(ssl && !certbot ? '' : '#') %>TRAMBAR_SSL_KEY=<%= key_path %>
+<%=(ssl && certbot ? '' : '#') %>TRAMBAR_SSL_EMAIL=<%= contact_email %>
+TRAMBAR_SOURCE_FOLDER=<%= source_folder %>

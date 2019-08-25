@@ -24,7 +24,7 @@ services:
       - DATABASE_ADMIN_PASSWORD=${TRAMBAR_DATABASE_ADMIN_PASSWORD}
       - DATABASE_CLIENT_PASSWORD=${TRAMBAR_DATABASE_CLIENT_PASSWORD}
       - DATABASE_AUTH_PASSWORD=${TRAMBAR_DATABASE_AUTH_PASSWORD}
-    command: [ node, --experimental-modules, schema-manager.mjs ]
+    command: [ nodemon, --experimental-modules, schema-manager.mjs ]
     depends_on:
       - postgres
   webdav_server:                # WebDAV server
@@ -34,19 +34,19 @@ services:
     environment:
       - POSTGRES_USER=root
       - POSTGRES_PASSWORD=${TRAMBAR_DATABASE_ROOT_PASSWORD}
-    command: [ node, --experimental-modules, webdav-server.mjs ]
+    command: [ nodemon, --experimental-modules, webdav-server.mjs ]
     depends_on:
       - postgres
   www_handler:                  # Web page handler (Node.js)
     extends: { file: node.yml, service: node }
     volumes:
       - web_cache:/var/cache/nginx
-    command: [ node, --experimental-modules, www-handler.mjs ]
+    command: [ nodemon, --experimental-modules, www-handler.mjs ]
     depends_on:
       - postgres
   data_server:                  # Data server (Node.js)
     extends: { file: node.yml, service: node }
-    command: [ node, --experimental-modules, data-server.mjs ]
+    command: [ nodemon, --experimental-modules, data-server.mjs ]
     depends_on:
       - postgres
   admin_data_server:            # Admin data server (Node.js)
@@ -54,7 +54,7 @@ services:
     environment:
       - POSTGRES_USER=admin_role
       - POSTGRES_PASSWORD=${TRAMBAR_DATABASE_ADMIN_PASSWORD}
-    command: [ node, --experimental-modules, data-server.mjs ]
+    command: [ nodemon, --experimental-modules, data-server.mjs ]
     depends_on:
       - postgres
   session_manager:              # Authentication manager (Node.js)
@@ -65,29 +65,29 @@ services:
       - POSTGRES_USER=auth_role
       - POSTGRES_PASSWORD=${TRAMBAR_DATABASE_AUTH_PASSWORD}
       - HTPASSWD_PATH=/etc/trambar/${TRAMBAR_HTPASSWD_NAME}
-    command: [ node, --experimental-modules, session-manager.mjs ]
+    command: [ nodemon, --experimental-modules, session-manager.mjs ]
     depends_on:
       - postgres
   media_server:                 # Media server (Node.js)
     extends: { file: node.yml, service: node }
     volumes:
       - ${TRAMBAR_MEDIA_FOLDER}:/var/cache/media
-    command: [ node, --experimental-modules, media-server.mjs ]
+    command: [ nodemon, --experimental-modules, media-server.mjs ]
     depends_on:
       - postgres
   event_notifier:               # WebSocket Notifier (Node.js)
     extends: { file: node.yml, service: node }
-    command: [ node, --experimental-modules, event-notifier.mjs ]
+    command: [ nodemon, --experimental-modules, event-notifier.mjs ]
     depends_on:
       - postgres
   live_data_invalidator:        # Live Data Invalidator (Node.js)
     extends: { file: node.yml, service: node }
-    command: [ node, --experimental-modules, live-data-invalidator.mjs ]
+    command: [ nodemon, --experimental-modules, live-data-invalidator.mjs ]
     depends_on:
       - postgres
   live_data_updater:            # Live Data Updater (Node.js)
     extends: { file: node.yml, service: node }
-    command: [ node, --experimental-modules, live-data-updater.mjs ]
+    command: [ nodemon, --experimental-modules, live-data-updater.mjs ]
     depends_on:
       - postgres
   gitlab_adapter:               # GitLab Adapter (Node.js)
@@ -95,6 +95,6 @@ services:
     environment:
       - POSTGRES_USER=admin_role
       - POSTGRES_PASSWORD=${TRAMBAR_DATABASE_ADMIN_PASSWORD}
-    command: [ node, --experimental-modules, gitlab-adapter.mjs ]
+    command: [ nodemon, --experimental-modules, gitlab-adapter.mjs ]
     depends_on:
       - postgres
