@@ -11,8 +11,4 @@ TRAMBAR_HTPASSWD_NAME=trambar.htpasswd
 TRAMBAR_EXTRA_FOLDER=./extra
 TRAMBAR_HTTP_PORT=<%= http_port %>
 <%=(ssl ? '' : '#') %>TRAMBAR_HTTPS_PORT=<%= https_port %>
-<%=(ssl ? '' : '#') %>TRAMBAR_SSL_DOMAIN=<%= server_name %>
 <%=(ssl ? '' : '#') %>TRAMBAR_SSL_FOLDER=<%= ssl_folder %>
-<%=(ssl && !certbot ? '' : '#') %>TRAMBAR_SSL_CERT=<%= cert_path %>
-<%=(ssl && !certbot ? '' : '#') %>TRAMBAR_SSL_KEY=<%= key_path %>
-<%=(ssl && certbot ? '' : '#') %>TRAMBAR_SSL_EMAIL=<%= contact_email %>

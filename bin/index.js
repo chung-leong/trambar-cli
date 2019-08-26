@@ -127,9 +127,9 @@ var scriptDescription = [
     {
         header: 'Certbot commands',
         content: [
-            { name: 'add', summary: 'Add domain name(s)' },
+            { name: 'add', summary: 'Add domain names' },
             { name: 'list', summary: 'List domain names' },
-            { name: 'remove', summary: 'Remove domain name(s)' },
+            { name: 'remove', summary: 'Remove domain names' },
         ]
     },
     {
@@ -574,6 +574,15 @@ function promptForPassword(question, def) {
     return password;
 }
 
+function promptForDomains(question, args) {
+    var list = args;
+    while (_.isEmpty(list)) {
+        var text = promptForText(question);
+        list = _.filter(_.split(text, /[\s,;]+/));
+    }
+    return list;
+}
+
 function promptForText(question, def) {
     var prompt = attachDefault(question, def) + ' ';
     var text;
@@ -787,8 +796,9 @@ function createConfiguration() {
             ssl: true,
             certbot: (pub) ? true : false,
             snakeoil: (pub) ? false : true,
-            server_name: (pub) ? '' : OS.hostname(),
+            domains: [],
             contact_email: '',
+            notification: true,
             http_port: (pub) ? 80 : 8080,
             https_port: (pub) ? 443 : 8443,
             cert_path: '',
@@ -806,13 +816,14 @@ function createConfiguration() {
         if (config.ssl) {
             config.certbot = confirm('Use certbot (https://certbot.eff.org/)?', config.certbot);
             if (config.certbot) {
-                config.server_name = promptForText('Server domain name:', config.server_name);
+                config.domains = promptForDomains('Server domain names:', []);
                 config.contact_email = promptForText('Contact e-mail:');
+                config.notification = confirm('Receive notification e-mails from EFF?', config.notification);
                 config.ssl_folder = './certbot';
                 config.snakeoil = false;
             } else {
                 config.snakeoil = confirm('Use self-signed SSL certificate?', config.snakeoil);
-                config.server_name = promptForText('Server domain name:', config.server_name);
+                config.domains = promptForDomains('Server domain names:', []);
                 if (config.snakeoil) {
                     config.ssl_folder = configFolder + '/certs';
                     config.cert_path = config.ssl_folder + '/snakeoil.crt';
@@ -835,18 +846,31 @@ function createConfiguration() {
             config.https_port = promptForPort('HTTPS port:', config.https_port);
         }
         config.http_port = promptForPort('HTTP port:', config.http_port);
-        var password = promptForPassword('Password for Trambar root account:', defaultPassword);
 
-        if (config.snakeoil) {
-            createConfigFile(config.cert_path, 'snakeoil.crt', {});
-            createConfigFile(config.key_path, 'snakeoil.key', {});
-        }
+        var password = promptForPassword('Password for Trambar root account:', defaultPassword);
+        savePassword(configFolder + '/trambar.htpasswd', password);
+
         createConfigFile(configFolder + '/docker-compose.yml', 'docker-compose.yml', config);
         createConfigFile(configFolder + '/nginx.yml', 'nginx.yml', config);
         createConfigFile(configFolder + '/node.yml', 'node.yml', config);
         createConfigFile(configFolder + '/postgres.yml', 'postgres.yml', config);
         createConfigFile(configFolder + '/.env', 'env', config, '0600');
-        savePassword(configFolder + '/trambar.htpasswd', password);
+        if (config.certbot) {
+            config.domains = promptForDomains('Server domain names:', []);
+            config.contact_email = promptForText('Contact e-mail:');
+            config.ssl_folder = './certbot';
+            config.snakeoil = false;
+            var certbot = {
+                domains: config.domains,
+                email: config.contact_email,
+                notification: config.notification,
+            };
+            saveCertbotConfig(certbot);
+            requestCertbotCerts(certbot);
+        } else if (config.snakeoil) {
+            createConfigFile(config.cert_path, 'snakeoil.crt', {});
+            createConfigFile(config.key_path, 'snakeoil.key', {});
+        }
         return true;
     } catch (err) {
         console.error(err.message);
@@ -991,16 +1015,7 @@ function addDomainName() {
     if (!checkRootAccess()) {
         return false;
     }
-    var names;
-    if (_.isEmpty(args)) {
-        var text = promptForText('Domain(s) to add:');
-        names = _.filter(_.split(text, /[\s,;]+/));
-    } else {
-        names = args;
-    }
-    if (_.isEmpty(names)) {
-        return false;
-    }
+    var names = promptForDomains('Domains to add:', args);
     var config = loadCertbotConfig();
     if (!config) {
         config = {};
@@ -1022,16 +1037,7 @@ function removeDomainName() {
     if (!config) {
         return false;
     }
-    var names;
-    if (_.isEmpty(args)) {
-        var text = promptForText('Domain(s) to remove:');
-        names = _.filter(_.split(text, /[\s,;]+/));
-    } else {
-        names = args;
-    }
-    if (_.isEmpty(names)) {
-        return false;
-    }
+    var names = promptForDomains('Domains to remove:', args);
     config.domains = _.difference(config.domains, names);
     saveCertbotConfig(config);
     requestCertbotCerts(config);
@@ -1078,7 +1084,7 @@ function requestCertbotCerts(config) {
     // certbot command
     args.push('certonly', '--standalone');
     args.push('--preferred-challenges', 'http');
-    config.domains.each(function(name) {
+    _.each(config.domains, function(name) {
         args.push('-d', name);
     });
     args.push('--agree-tos');
@@ -1114,7 +1120,8 @@ function createDevConfiguration() {
             ssl: true,
             certbot: false,
             snakeoil: true,
-            server_name: 'localhost',
+            domains: [ 'localhost' ],
+            notification: false,
             contact_email: '',
             http_port: 80,
             https_port: 443,
@@ -1131,7 +1138,16 @@ function createDevConfiguration() {
             }),
         };
         config.source_folder = promptForText('Trambar git working folder:', config.source_folder);
+
         var password = promptForPassword('Password for Trambar root account:', defaultPassword);
+        savePassword(configFolder + '/dev/trambar.htpasswd', password);
+
+        createConfigFile(configFolder + '/dev/docker-compose.yml', 'dev/docker-compose.yml', config);
+        createConfigFile(configFolder + '/dev/nginx.yml', 'nginx.yml', config);
+        createConfigFile(configFolder + '/dev/node.yml', 'dev/node.yml', config);
+        createConfigFile(configFolder + '/dev/postgres.yml', 'postgres.yml', config);
+        createConfigFile(configFolder + '/dev/.env', '/dev/env', config, '0600');
+        createConfigFile(configFolder + '/dev/conf.d/default.conf', 'default.conf', config);
         if (config.snakeoil) {
             config.ssl_folder = configFolder + '/dev/certs';
             config.cert_path = config.ssl_folder + '/snakeoil.crt';
@@ -1139,13 +1155,6 @@ function createDevConfiguration() {
             createConfigFile(config.cert_path, 'snakeoil.crt', {});
             createConfigFile(config.key_path, 'snakeoil.key', {});
         }
-        createConfigFile(configFolder + '/dev/docker-compose.yml', 'dev/docker-compose.yml', config);
-        createConfigFile(configFolder + '/dev/nginx.yml', 'nginx.yml', config);
-        createConfigFile(configFolder + '/dev/node.yml', 'dev/node.yml', config);
-        createConfigFile(configFolder + '/dev/postgres.yml', 'postgres.yml', config);
-        createConfigFile(configFolder + '/dev/.env', '/dev/env', config, '0600');
-        createConfigFile(configFolder + '/dev/conf.d/default.conf', 'default.conf', config);
-        savePassword(configFolder + '/dev/trambar.htpasswd', password);
         return true;
     } catch (err) {
         console.error(err.message);
