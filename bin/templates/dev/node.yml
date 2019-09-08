@@ -1,6 +1,7 @@
 version: "2"
 services:
   node:
+    restart: "no"
     image: trambar/trambar-node-dev:${TRAMBAR_BUILD}
     volumes:
       - ${TRAMBAR_SOURCE_FOLDER}/admin/www:/opt/trambar/admin/www

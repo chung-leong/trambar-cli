@@ -4,6 +4,7 @@ volumes:
 services:
   nginx:                        # Nginx web server
     extends: { file: nginx.yml, service: nginx }
+    restart: "no"
     volumes:
       - web_cache:/var/cache/nginx
     depends_on:
@@ -14,6 +15,9 @@ services:
       - www_handler
   postgres:                     # PostgreSQL database manager
     extends: { file: postgres.yml, service: postgres }
+    restart: "no"
+    ports:
+      - 5432:5432
   schema_manager:               # Database schema manager
     extends:
       file: node.yml
