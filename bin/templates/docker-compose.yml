@@ -6,13 +6,15 @@ services:
     extends: { file: nginx.yml, service: nginx }
     depends_on:
       - data_server
+      - admin_data_server
+      - media_server
       - event_notifier
+      - www_handler
   postgres:                     # PostgreSQL database manager
     extends: { file: postgres.yml, service: postgres }
   schema_manager:               # Database schema manager (Node.js)
     extends: { file: node.yml, service: node }
     environment:
-      - NODE_ENV=production
       - POSTGRES_USER=root
       - POSTGRES_PASSWORD=${TRAMBAR_DATABASE_ROOT_PASSWORD}
       - DATABASE_ADMIN_PASSWORD=${TRAMBAR_DATABASE_ADMIN_PASSWORD}
@@ -75,3 +77,9 @@ services:
     depends_on:
       - postgres
     command: [ node, --experimental-modules, gitlab-adapter.js ]
+<% if (volumes) { %>
+volumes:
+  <% for (var i = 0; i < volumes.length; i++) { %>
+  <%= volumes[i] %>: {}
+  <% } %>
+<% } %>

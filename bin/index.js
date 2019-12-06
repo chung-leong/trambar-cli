@@ -16,31 +16,28 @@ var CommonDir = require('commondir');
 var defaultPrefix = 'trambar';
 var defaultPassword = 'password';
 var defaultBuild = 'latest';
-
 var defaultConfigFolder;
-var defaultDatabaseFolder;
-var defaultMediaFolder;
 var defaultSourceFolder;
+var virtualization;
 
 switch (OS.type()) {
     case 'Linux':
         var home = process.env.HOME;
         defaultConfigFolder = '/etc/trambar';
-        defaultDatabaseFolder = '/srv/trambar/postgres';
-        defaultMediaFolder = '/srv/trambar/media';
         defaultSourceFolder = home + '/trambar';
+        virtualization = false;
         break;
     case 'Windows_NT':
         var home = _.replace(process.env.USERPROFILE, /\\/g, '/');
         defaultConfigFolder = home + '/Trambar';
-        defaultDatabaseFolder = '';
-        defaultMediaFolder = '';
+        defaultSourceFolder = home + '/trambar';
+        virtualization = true;
         break;
     case 'Darwin':
         var home = process.env.HOME;
         defaultConfigFolder = home + '/Trambar';
-        defaultDatabaseFolder = '';
-        defaultMediaFolder = '';
+        defaultSourceFolder = home + '/trambar';
+        virtualization = true;
         break;
     default:
         console.log('Unsupported operation system', OS.type());
@@ -149,11 +146,9 @@ var scriptDescription = [
 ];
 
 var options = CommandLineArgs(optionDefinitions);
-var configFolder = options.config || defaultConfigFolder;
-var prefix = options.prefix || defaultPrefix;
-var build = options.build || defaultBuild;
 var command = _.get(options, [ '*', 0 ]);
 var args = _.slice(_.get(options, '*'), 1);
+var dev = false;
 if (command) {
     if (!runCommand(command)) {
         process.exit(-1);
@@ -200,11 +195,14 @@ function runCommand(command) {
         case 'remove':
             return removeDomainName();
         case 'start-dev':
-            return startDev();
+            dev = true;
+            return start();
         case 'stop-dev':
-            return stopDev();
+            dev = true;
+            return stop();
         case 'config-dev':
-            return configDev();
+            dev = true;
+            return install();
         default:
             console.log('Unknown command: ' + command);
             return false;
@@ -215,27 +213,22 @@ function editCompose() {
     if (!checkRootAccess()) {
         return false;
     }
-    var path = configFolder + '/docker-compose.yml';
-    editTextFile(path);
+    editTextFile('docker-compose.yml');
 }
 
 function editEnv() {
     if (!checkRootAccess()) {
         return false;
     }
-    var path = configFolder + '/.env';
-    editTextFile(path);
+    editTextFile('.env');
 }
 
 function setPassword() {
     if (!checkRootAccess()) {
         return false;
     }
-    if (!checkConfiguration()) {
-        return false;
-    }
     var password = promptForPassword('Password:');
-    if (!savePassword(configFolder + '/trambar.htpasswd', password)) {
+    if (!writePasswordFile('./trambar.htpasswd', password)) {
         return false;
     }
     return true;
@@ -260,9 +253,15 @@ function install() {
     if (!pullImages()) {
         return false;
     }
+    var name = getScriptName();
     console.log('');
-    console.log('Installation complete');
-    console.log('Run "' + getScriptName() + ' start" to start Trambar');
+    if (dev) {
+        console.log('Configuration complete');
+        console.log('Run "' + getScriptName() + ' start-dev" to start development server');
+    } else {
+        console.log('Installation complete');
+        console.log('Run "' + name + ' start" to start Trambar');
+    }
     return true;
 }
 
@@ -301,7 +300,7 @@ function showLogs() {
         console.log('Trambar is not currently running');
         return false;
     }
-    process.chdir(configFolder);
+    useConfigFolder();
     return run('docker-compose', [ '-p', prefix, 'logs', '-f' ]);
 }
 
@@ -376,61 +375,6 @@ function uninstall() {
     return true;
 }
 
-function startDev() {
-    if (!checkDockerAccess()) {
-        return false;
-    }
-    if (!checkDevConfiguration()) {
-        return false;
-    }
-    if (!createDevContainers()) {
-        return false;
-    }
-    return true;
-}
-
-function stopDev() {
-    if (!checkDockerAccess()) {
-        return false;
-    }
-    if (!checkDevConfiguration()) {
-        return false;
-    }
-    if (!isRunningDev()) {
-        console.log('Development server is not currently running');
-        return false;
-    }
-    if (!destroyDevContainers()) {
-        return false;
-    }
-    return true;
-}
-
-function configDev() {
-    if (!checkRootAccess()) {
-        return false;
-    }
-    if (!createDevConfiguration()) {
-        return false;
-    }
-    if (!installDocker()) {
-        return false;
-    }
-    if (!installDockerCompose()) {
-        return false;
-    }
-    if (!checkDockerAccess()) {
-        return false;
-    }
-    if (!pullDevImages()) {
-        return false;
-    }
-    console.log('');
-    console.log('Configuration complete');
-    console.log('Run "' + getScriptName() + ' start-dev" to start development server');
-    return true;
-}
-
 function editTextFile(path) {
     var cmd = process.env.VISUAL || process.env.EDITOR || 'vi';
     var args = [ path ];
@@ -497,7 +441,7 @@ function installDockerCompose() {
 }
 
 function pullImages() {
-    process.chdir(configFolder);
+    useConfigFolder();
     if (!run('docker-compose', [ 'pull' ])) {
         return false;
     }
@@ -522,17 +466,20 @@ function removeImages() {
 }
 
 function createContainers() {
-    process.chdir(configFolder);
+    var prefix = getContainerPrefix();
+    useConfigFolder();
     return run('docker-compose', [ '-p', prefix, 'up', '-d' ]);
 }
 
 function destroyContainers() {
-    process.chdir(configFolder);
+    var prefix = getContainerPrefix();
+    useConfigFolder();
     return run('docker-compose', [ '-p', prefix, 'down' ]);
 }
 
 function restartContainers() {
-    process.chdir(configFolder);
+    var prefix = getContainerPrefix();
+    useConfigFolder();
     return run('docker-compose', [ '-p', prefix, 'restart' ]);
 }
 
@@ -715,10 +662,10 @@ function checkDockerAccess() {
 }
 
 function checkConfiguration() {
-    if (!checkFileExistence(configFolder + '/docker-compose.yml')) {
+    if (!checkFileExistence('./docker-compose.yml')) {
         return false;
     }
-    if (!checkFileExistence(configFolder + '/.env')) {
+    if (!checkFileExistence('./.env')) {
         return false;
     }
     return true;
@@ -791,9 +738,9 @@ function removeImage(id) {
 
 function createConfiguration() {
     try {
-        var pub = isPublicServer();
+        var pub = (dev) ? false : isPublicServer();
         var config = {
-            ssl: true,
+            ssl: (pub) ? true : false,
             certbot: (pub) ? true : false,
             snakeoil: (pub) ? false : true,
             domains: [],
@@ -804,15 +751,28 @@ function createConfiguration() {
             cert_path: '',
             key_path: '',
             ssl_folder: '',
-            database_folder: defaultDatabaseFolder,
-            media_folder: defaultMediaFolder,
-            volumes: !defaultDatabaseFolder || !defaultMediaFolder,
-            build: build,
-            password: _.map([ 1, 2, 3, 4], function() {
-                return Crypto.randomBytes(16).toString('hex');
-            }),
+            source_folder: defaultSourceFolder,
+            database_folder: getDataFolder('postgres'),
+            media_folder: getDataFolder('media'),
+            build: getTrambarBuild(),
+            password: createRandomPasswords(6),
+            root_password: defaultPassword,
+            restart: (dev) ? 'no' : 'always',
+
+            gitlab: false,
+            gitlab_root_folder: '',
+            gitlab_external_url: '',
+
+            wordpress: false,
+            wordpress_root_folder: '',
+            wordpress_data_folder: '',
         };
-        config.ssl = confirm('Set up SSL?', config.ssl);
+        if (!dev) {
+            config.ssl = confirm('Set up SSL?', config.ssl);
+        }
+        if (dev) {
+            config.source_folder = promptForText('Trambar git working folder:', config.source_folder);
+        }
         if (config.ssl) {
             config.certbot = confirm('Use certbot (https://certbot.eff.org/)?', config.certbot);
             if (config.certbot) {
@@ -825,60 +785,161 @@ function createConfiguration() {
                 config.snakeoil = confirm('Use self-signed SSL certificate?', config.snakeoil);
                 config.domains = promptForDomains('Server domain names:', []);
                 if (config.snakeoil) {
-                    config.ssl_folder = configFolder + '/certs';
-                    config.cert_path = config.ssl_folder + '/snakeoil.crt';
-                    config.key_path = config.ssl_folder + '/snakeoil.key';
+                    config.cert_path = getCertificatePath('snakeoil.crt');
+                    config.key_path = getCertificatePath('snakeoil.key');
                 } else {
                     config.cert_path = promptForPath('Full path of certificate:');
                     config.key_path = promptForPath('Full path of private key:');
-                    config.ssl_folder = CommonDir([
-                        config.cert_path,
-                        config.key_path,
-                        FS.realpathSync(config.cert_path),
-                        FS.realpathSync(config.key_path),
-                    ]);
-                    if (/^\/[^\/]+$/.test(config.ssl_folder)) {
-                        console.error('Certificate location requires mounting of root level folder');
-                        process.exit(-1);
-                    }
+                }
+                config.ssl_folder = CommonDir([
+                    config.cert_path,
+                    config.key_path,
+                    FS.realpathSync(config.cert_path),
+                    FS.realpathSync(config.key_path),
+                ]);
+                if (/^\/[^\/]+$/.test(config.ssl_folder)) {
+                    console.error('Certificate location requires mounting of root level folder');
+                    process.exit(-1);
                 }
             }
             config.https_port = promptForPort('HTTPS port:', config.https_port);
         }
         config.http_port = promptForPort('HTTP port:', config.http_port);
+        config.root_password = promptForPassword('Password for Trambar root account:', config.root_password);
+        config.gitlab = confirm('Install GitLab?', config.gitlab);
+        if (config.gitlab) {
+            config.gitlab_config_folder = getDataFolder('gitlab/config');
+            config.gitlab_data_folder = getDataFolder('gitlab/data');
+            config.gitlab_log_folder = getDataFolder('gitlab/logs');
+        }
+        config.wordpress = confirm('Install WordPress?', config.wordpress);
+        if (config.wordpress) {
+            config.wordpress_data_folder = getDataFolder('wordpress/data');
+            config.wordpress_html_folder = getDataFolder('wordpress/html');
+        }
+        config.volumes = getVirtualVolumes();
 
-        var password = promptForPassword('Password for Trambar root account:', defaultPassword);
-        savePassword(configFolder + '/trambar.htpasswd', password);
+        writeConfigFile('docker-compose.yml', config);
+        writeConfigFile('nginx.yml', config);
+        writeConfigFile('node.yml', config);
+        writeConfigFile('postgres.yml', config);
+        writeConfigFile('.env', config, '0600');
+        writePasswordFile('trambar.htpasswd', config.root_password);
 
-        createConfigFile(configFolder + '/docker-compose.yml', 'docker-compose.yml', config);
-        createConfigFile(configFolder + '/nginx.yml', 'nginx.yml', config);
-        createConfigFile(configFolder + '/node.yml', 'node.yml', config);
-        createConfigFile(configFolder + '/postgres.yml', 'postgres.yml', config);
-        createConfigFile(configFolder + '/.env', 'env', config, '0600');
-        if (config.certbot) {
-            config.domains = promptForDomains('Server domain names:', []);
-            config.contact_email = promptForText('Contact e-mail:');
-            config.ssl_folder = './certbot';
-            config.snakeoil = false;
-            var certbot = {
-                domains: config.domains,
-                email: config.contact_email,
-                notification: config.notification,
-            };
-            saveCertbotConfig(certbot);
-            requestCertbotCerts(certbot);
-        } else if (config.snakeoil) {
-            createConfigFile(config.cert_path, 'snakeoil.crt', {});
-            createConfigFile(config.key_path, 'snakeoil.key', {});
+        if (config.ssl) {
+            if (config.certbot) {
+                var certbot = {
+                    domains: config.domains,
+                    email: config.contact_email,
+                    notification: config.notification,
+                };
+                writeCertbotConfig(certbot);
+                requestCertbotCerts(certbot);
+            } else if (config.snakeoil) {
+                writeCertificate('snakeoil.crt');
+                writeCertificate('snakeoil.key');
+            }
         }
         return true;
     } catch (err) {
-        console.error(err.message);
+        console.error(err);
         return false;
     }
 }
 
-function createConfigFile(path, name, config, mode) {
+function getContainerPrefix() {
+    if (dev) {
+        return 'dev';
+    }
+    return options.prefix || defaultPrefix;
+}
+
+function getTrambarBuild() {
+    return options.build || defaultBuild;
+}
+
+function getConfigFolder() {
+    var folder = options.config || defaultConfigFolder;
+    if (dev) {
+        folder += '/dev';
+    }
+    return folder;
+}
+
+function getCertificatePath(filename) {
+    return getConfigFolder() + '/certs/' + filename;
+}
+
+var virtualVolumes;
+
+function getDataFolder(path) {
+    if (virtualization) {
+        var name = _.replace(path, /\//g, '_');
+        if (!_.includes(virtualVolumes, name)) {
+            if (!virtualVolumes) {
+                virtualVolumes = [];
+            }
+            virtualVolumes.push(name);
+        }
+        return name;
+    } else {
+        return '/srv/trambar/' + path;
+    }
+}
+
+function getVirtualVolumes() {
+    if (virtualVolumes) {
+        return virtualVolumes;
+    }
+}
+
+function useConfigFolder() {
+    var folder = getConfigFolder();
+    process.chdir(folder);
+}
+
+function writeConfigFile(name, config, mode) {
+    var path = getConfigFolder() + '/' + name;
+    var templateName = _.replace(name, /^\./, '');
+    var templatePath = __dirname + '/templates/' + templateName;
+    if (dev) {
+        var altTemplatePath = __dirname + '/templates/dev/' + templateName;
+        if (FS.existsSync(altTemplatePath)) {
+            templatePath = altTemplatePath;
+        }
+    }
+    var template = FS.readFileSync(templatePath, 'utf-8');
+    try {
+        var fn = _.template(template, { interpolate: /<%=([\s\S]+?)%>/g });
+        var output = fn(config);
+        var text = filterBlankLines(output);
+    } catch (err) {
+        console.error('Unable to compile template: ' + templatePath);
+        throw err;
+    }
+    return writeFile(path, text, mode);
+}
+
+function writeCertificate(name, mode) {
+    var path = getCertificatePath(name);
+    var sourcePath = __dirname + '/certs/' + name;
+    var text = FS.readFileSync(sourcePath, 'utf-8');
+    return writeFile(path, text, mode);
+}
+
+function writePasswordFile(name, password, mode) {
+    var path = getConfigFolder() + '/' + name;
+    if (!password) {
+        return false;
+    }
+    var hash = BcryptJS.hashSync(password, 10);
+    // Bcrypt hash made by htpasswd has the prefix $2y$ instead of $2a$
+    hash = '$2y$' + hash.substring(4);
+    var text = 'root:' + hash + '\n';
+    return writeFile(path, text, mode);
+}
+
+function writeFile(path, text, mode) {
     if (typeof(mode) === 'string') {
         mode = parseInt(mode, 8);
     }
@@ -887,35 +948,13 @@ function createConfigFile(path, name, config, mode) {
             return;
         }
     }
+    console.log('Saving ' + path);
     var folder = Path.dirname(path);
     FS.mkdirpSync(folder);
-    var templatePath = __dirname + '/templates/' + name;
-    var template = FS.readFileSync(templatePath, 'utf-8');
-    var fn = _.template(template, { interpolate: /<%=([\s\S]+?)%>/g });
-    var text = fn(config);
-
-    console.log('Saving ' + path);
     FS.writeFileSync(path, text);
     if (mode) {
-        FS.chmodSync(path, mode);
+        //FS.chmodSync(path, mode);
     }
-}
-
-function savePassword(path, password) {
-    if (!password) {
-        return false;
-    }
-    var hash = BcryptJS.hashSync(password, 10);
-    // Bcrypt hash made by htpasswd has the prefix $2y$ instead of $2a$
-    hash = '$2y$' + hash.substring(4);
-    var text = 'root:' + hash + '\n';
-    if (FS.existsSync(path)) {
-        if (!confirm('Overwrite' + path + '?', false)) {
-            return;
-        }
-    }
-    console.log('Saving ' + path);
-    FS.writeFileSync(path, text);
     return true;
 }
 
@@ -1011,6 +1050,18 @@ function isPublicServer() {
     });
 }
 
+function createRandomPasswords(count) {
+    var list = [];
+    for (var i = 0; i < count; i++) {
+        if (dev) {
+            list.push('qwerty');
+        } else {
+            list.push(Crypto.randomBytes(16).toString('hex'));
+        }
+    }
+    return list;
+}
+
 function addDomainName() {
     if (!checkRootAccess()) {
         return false;
@@ -1024,7 +1075,7 @@ function addDomainName() {
         config.domains = [];
     }
     config.domains = _.union(config.domains, names);
-    saveCertbotConfig(config);
+    writeCertbotConfig(config);
     requestCertbotCerts(config);
     return true;
 }
@@ -1039,7 +1090,7 @@ function removeDomainName() {
     }
     var names = promptForDomains('Domains to remove:', args);
     config.domains = _.difference(config.domains, names);
-    saveCertbotConfig(config);
+    writeCertbotConfig(config);
     requestCertbotCerts(config);
     return true;
 }
@@ -1054,19 +1105,17 @@ function listDomainNames() {
 }
 
 function loadCertbotConfig() {
-    var path = configFolder + '/certbot.json';
     try {
-        var text = FS.readFileSync(path, 'utf8');
+        var text = FS.readFileSync('./certbot.json', 'utf8');
         return JSON.parse(text);
     } catch (err) {
     }
     return null;
 }
 
-function saveCertbotConfig(config) {
-    var path = configFolder + '/certbot.json';
+function writeCertbotConfig(config) {
     var text = JSON.stringify(config, undefined, 2) + '\n';
-    FS.writeFileSync(path, text);
+    FS.writeFileSync('./certbot.json', text);
 }
 
 function requestCertbotCerts(config) {
@@ -1104,83 +1153,9 @@ function findNginx() {
     });
 }
 
-function checkDevConfiguration() {
-    if (!checkFileExistence(configFolder + '/dev/docker-compose.yml')) {
-        return false;
-    }
-    if (!checkFileExistence(configFolder + '/dev/.env')) {
-        return false;
-    }
-    return true;
-}
-
-function createDevConfiguration() {
-    try {
-        var config = {
-            ssl: true,
-            certbot: false,
-            snakeoil: true,
-            domains: [ 'localhost' ],
-            notification: false,
-            contact_email: '',
-            http_port: 80,
-            https_port: 443,
-            cert_path: '',
-            key_path: '',
-            ssl_folder: '',
-            database_folder: defaultDatabaseFolder,
-            media_folder: defaultMediaFolder,
-            source_folder: defaultSourceFolder,
-            volumes: !defaultDatabaseFolder || !defaultMediaFolder,
-            build: build,
-            password: _.map([ 1, 2, 3, 4], function() {
-                return 'qwerty';
-            }),
-        };
-        config.source_folder = promptForText('Trambar git working folder:', config.source_folder);
-
-        var password = promptForPassword('Password for Trambar root account:', defaultPassword);
-        savePassword(configFolder + '/dev/trambar.htpasswd', password);
-
-        createConfigFile(configFolder + '/dev/docker-compose.yml', 'dev/docker-compose.yml', config);
-        createConfigFile(configFolder + '/dev/nginx.yml', 'nginx.yml', config);
-        createConfigFile(configFolder + '/dev/node.yml', 'dev/node.yml', config);
-        createConfigFile(configFolder + '/dev/postgres.yml', 'postgres.yml', config);
-        createConfigFile(configFolder + '/dev/.env', '/dev/env', config, '0600');
-        createConfigFile(configFolder + '/dev/conf.d/default.conf', 'default.conf', config);
-        if (config.snakeoil) {
-            config.ssl_folder = configFolder + '/dev/certs';
-            config.cert_path = config.ssl_folder + '/snakeoil.crt';
-            config.key_path = config.ssl_folder + '/snakeoil.key';
-            createConfigFile(config.cert_path, 'snakeoil.crt', {});
-            createConfigFile(config.key_path, 'snakeoil.key', {});
-        }
-        return true;
-    } catch (err) {
-        console.error(err.message);
-        return false;
-    }
-}
-
-function isRunningDev() {
-    var processes = getProcesses(/^dev_/);
-    return !_.isEmpty(processes);
-}
-
-function pullDevImages() {
-    process.chdir(configFolder + '/dev');
-    if (!run('docker-compose', [ 'pull' ])) {
-        return false;
-    }
-    return true;
-}
-
-function createDevContainers() {
-    process.chdir(configFolder + '/dev');
-    return run('docker-compose', [ '-p', 'dev', 'up', '-d' ]);
-}
-
-function destroyDevContainers() {
-    process.chdir(configFolder + '/dev');
-    return run('docker-compose', [ '-p', 'dev', 'down' ]);
+function filterBlankLines(text) {
+    var lines = _.filter(_.split(text, '\n'), function(line) {
+        return _.trim(line);
+    });
+    return lines.join('\n');
 }

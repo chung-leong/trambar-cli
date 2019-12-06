@@ -1,7 +1,6 @@
 version: "2"
 services:
   node:
-    restart: "no"
     image: trambar/trambar-node-dev:${TRAMBAR_BUILD}
     volumes:
       - ${TRAMBAR_SOURCE_FOLDER}/admin/www:/opt/trambar/admin/www
@@ -15,3 +14,4 @@ services:
       - POSTGRES_DB=${TRAMBAR_DATABASE_NAME}
       - POSTGRES_USER=client_role
       - POSTGRES_PASSWORD=${TRAMBAR_DATABASE_CLIENT_PASSWORD}
+    restart: ${TRAMBAR_RESTART}

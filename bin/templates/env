@@ -1,14 +1,28 @@
+TRAMBAR_RESTART=<%= restart %>
 TRAMBAR_BUILD=<%= build %>
 TRAMBAR_DATABASE_NAME=trambar
-<%=(!volumes ? '' : '#') %>TRAMBAR_DATABASE_FOLDER=<%= database_folder %>
+TRAMBAR_DATABASE_FOLDER=<%= database_folder %>
 TRAMBAR_DATABASE_ROOT_PASSWORD=<%= password[0] %>
 TRAMBAR_DATABASE_ADMIN_PASSWORD=<%= password[1] %>
 TRAMBAR_DATABASE_CLIENT_PASSWORD=<%= password[2] %>
 TRAMBAR_DATABASE_AUTH_PASSWORD=<%= password[3] %>
-<%=(!volumes ? '' : '#') %>TRAMBAR_MEDIA_FOLDER=<%= media_folder %>
+TRAMBAR_MEDIA_FOLDER=<%= media_folder %>
 TRAMBAR_HTPASSWD_FOLDER=./
 TRAMBAR_HTPASSWD_NAME=trambar.htpasswd
-TRAMBAR_EXTRA_FOLDER=./extra
 TRAMBAR_HTTP_PORT=<%= http_port %>
-<%=(ssl ? '' : '#') %>TRAMBAR_HTTPS_PORT=<%= https_port %>
-<%=(ssl ? '' : '#') %>TRAMBAR_SSL_FOLDER=<%= ssl_folder %>
+TRAMBAR_HTTPS_PORT=<%= https_port %>
+TRAMBAR_SSL_FOLDER=<%= ssl_folder %>
+<% if (gitlab) { %>
+GITLAB_CONFIG_FOLDER=<%= gitlab_config_folder %>
+GITLAB_DATA_FOLDER=<%= gitlab_data_folder %>
+GITLAB_LOG_FOLDER=<%= gitlab_log_folder %>
+GITLAB_EXTERNAL_URL=<%= gitlab_external_url %>
+<% } %>
+<% if (wordpress) { %>
+WORDPRESS_DATABASE_NAME=wordpress
+WORDPRESS_DATABASE_USER=wordpress
+WORDPRESS_DATABASE_PASSWORD=<%= password[4] %>
+WORDPRESS_DATABASE_ROOT_PASSWORD=<%= password[5] %>
+WORDPRESS_HTML_FOLDER=<%= wordpress_html_folder %>
+WORDPRESS_DATA_FOLDER=<%= wordpress_data_folder %>
+<% } %>

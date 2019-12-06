@@ -1,0 +1,14 @@
+version: "2"
+services:
+  gitlab:
+    image: gitlab/gitlab-ce:latest
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        external_url ${GITLAB_EXTERNAL_URL}
+    ports:
+      - 22:22
+    volumes:
+      - ${GITLAB_CONFIG_FOLDER}:/etc/gitlab
+      - ${GITLAB_DATA_FOLDER}:/var/opt/gitlab
+      - ${GITLAB_LOG_FOLDER}:/var/log/gitlab
+    restart: ${TRAMBAR_RESTART}

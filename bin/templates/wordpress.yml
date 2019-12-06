@@ -1,0 +1,23 @@
+version: "2"
+services:
+  wordpress:
+    depends_on:
+      - wordpress_db
+    image: wordpress:latest
+    volumes:
+      - ${WORDPRESS_HTML_FOLDER}:/var/www/html
+    environment:
+      WORDPRESS_DB_HOST: wordpress_db:3306
+      WORDPRESS_DB_USER: ${WORDPRESS_DATABASE_USER}
+      WORDPRESS_DB_PASSWORD: ${WORDPRESS_DATABASE_PASSWORD}
+    restart: ${TRAMBAR_RESTART}
+  wordpress_db:
+    image: mariadb:10
+    volumes:
+      - ${WORDPRESS_DATA_FOLDER}:/var/lib/mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${WORDPRESS_DATABASE_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${WORDPRESS_DATABASE_NAME}
+      MYSQL_USER: ${WORDPRESS_DATABASE_USER}
+      MYSQL_PASSWORD: ${WORDPRESS_DATABASE_PASSWORD}
+    restart: ${TRAMBAR_RESTART}

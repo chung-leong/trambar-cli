@@ -1,7 +1,6 @@
 version: "2"
 services:
   postgres:
-    restart: always
     image: trambar/trambar-postgres:${TRAMBAR_BUILD}
     volumes:
       # mount directory for database
@@ -11,3 +10,4 @@ services:
       - POSTGRES_DB=${TRAMBAR_DATABASE_NAME}
       - POSTGRES_USER=root
       - POSTGRES_PASSWORD=${TRAMBAR_DATABASE_ROOT_PASSWORD}
+    restart: ${TRAMBAR_RESTART}

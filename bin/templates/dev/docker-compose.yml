@@ -4,9 +4,6 @@ volumes:
 services:
   nginx:                        # Nginx web server
     extends: { file: nginx.yml, service: nginx }
-    restart: "no"
-    volumes:
-      - web_cache:/var/cache/nginx
     depends_on:
       - data_server
       - admin_data_server
@@ -15,7 +12,6 @@ services:
       - www_handler
   postgres:                     # PostgreSQL database manager
     extends: { file: postgres.yml, service: postgres }
-    restart: "no"
     ports:
       - 5432:5432
   schema_manager:               # Database schema manager
@@ -102,3 +98,9 @@ services:
     command: [ nodemon, --experimental-modules, gitlab-adapter.mjs ]
     depends_on:
       - postgres
+<% if (volumes) { %>
+volumes:
+  <% for (var i = 0; i < volumes.length; i++) { %>
+  <%= volumes[i] %>: {}
+  <% } %>
+<% } %>
