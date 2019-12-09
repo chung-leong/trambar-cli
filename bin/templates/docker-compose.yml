@@ -10,6 +10,12 @@ services:
       - media_server
       - event_notifier
       - www_handler
+<% if (gitlab) { %>
+      - gitlab
+<% } %>
+<% if (wordpress) { %>
+      - wordpress
+<% } %>
   postgres:                     # PostgreSQL database manager
     extends: { file: postgres.yml, service: postgres }
   schema_manager:               # Database schema manager (Node.js)
@@ -77,6 +83,18 @@ services:
     depends_on:
       - postgres
     command: [ node, --experimental-modules, gitlab-adapter.js ]
+<% if (gitlab) { %>
+  gitlab:                       # GitLab
+    extends: { file: gitlab.yml, service: gitlab }
+<% } %>
+<% if (wordpress) { %>
+  wordpress:                    # WordPress
+    extends: { file: wordpress.yml, service: wordpress }
+    depends_on:
+      - wordpress_db
+  wordpress_db:                 # MariaDB
+    extends: { file: wordpress.yml, service: wordpress_db }
+<% } %>
 <% if (volumes) { %>
 volumes:
   <% for (var i = 0; i < volumes.length; i++) { %>

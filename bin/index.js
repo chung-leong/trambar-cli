@@ -662,10 +662,11 @@ function checkDockerAccess() {
 }
 
 function checkConfiguration() {
-    if (!checkFileExistence('./docker-compose.yml')) {
+    var folder = getConfigFolder();
+    if (!checkFileExistence(folder + '/docker-compose.yml')) {
         return false;
     }
-    if (!checkFileExistence('./.env')) {
+    if (!checkFileExistence(folder + '/.env')) {
         return false;
     }
     return true;
@@ -740,14 +741,15 @@ function createConfiguration() {
     try {
         var pub = (dev) ? false : isPublicServer();
         var config = {
+            dev: dev,
             ssl: (pub) ? true : false,
             certbot: (pub) ? true : false,
             snakeoil: (pub) ? false : true,
             domains: [],
             contact_email: '',
             notification: true,
-            http_port: (pub) ? 80 : 8080,
-            https_port: (pub) ? 443 : 8443,
+            http_port: (pub || dev) ? 80 : 8080,
+            https_port: (pub || dev) ? 443 : 8443,
             cert_path: '',
             key_path: '',
             ssl_folder: '',
@@ -760,10 +762,12 @@ function createConfiguration() {
             restart: (dev) ? 'no' : 'always',
 
             gitlab: false,
+            gitlab_domains: [],
             gitlab_root_folder: '',
             gitlab_external_url: '',
 
             wordpress: false,
+            wordpress_domains: [],
             wordpress_root_folder: '',
             wordpress_data_folder: '',
         };
@@ -776,7 +780,7 @@ function createConfiguration() {
         if (config.ssl) {
             config.certbot = confirm('Use certbot (https://certbot.eff.org/)?', config.certbot);
             if (config.certbot) {
-                config.domains = promptForDomains('Server domain names:', []);
+                config.domains = promptForDomains('Server domain names:', config.domains);
                 config.contact_email = promptForText('Contact e-mail:');
                 config.notification = confirm('Receive notification e-mails from EFF?', config.notification);
                 config.ssl_folder = './certbot';
@@ -808,12 +812,23 @@ function createConfiguration() {
         config.root_password = promptForPassword('Password for Trambar root account:', config.root_password);
         config.gitlab = confirm('Install GitLab?', config.gitlab);
         if (config.gitlab) {
+            config.gitlab_domains = promptForDomains('GitLab domain names:', config.gitlab_domains);
+            var domain = config.gitlab_domains[0];
+            var protocol = (config.ssl) ? 'https' : 'http';
+            var url = protocol + '://' + domain;
+            if (config.ssl && config.https_port !== 443) {
+                url += ':' + config.https_port;
+            } else if (!config.ssl && config.http_port !== 80) {
+                url += ':' + config.https_port;
+            }
+            config.gitlab_external_url = url;
             config.gitlab_config_folder = getDataFolder('gitlab/config');
             config.gitlab_data_folder = getDataFolder('gitlab/data');
             config.gitlab_log_folder = getDataFolder('gitlab/logs');
         }
         config.wordpress = confirm('Install WordPress?', config.wordpress);
         if (config.wordpress) {
+            config.wordpress_domains = promptForDomains('WordPress domain names:', config.wordpress_domains);
             config.wordpress_data_folder = getDataFolder('wordpress/data');
             config.wordpress_html_folder = getDataFolder('wordpress/html');
         }
@@ -823,13 +838,15 @@ function createConfiguration() {
         writeConfigFile('nginx.yml', config);
         writeConfigFile('node.yml', config);
         writeConfigFile('postgres.yml', config);
+        writeConfigFile('default.conf', config);
         writeConfigFile('.env', config, '0600');
         writePasswordFile('trambar.htpasswd', config.root_password);
 
         if (config.ssl) {
             if (config.certbot) {
+                var domains = _.concat(config.domains, config.gitlab_domains, config.wordpress_domains);
                 var certbot = {
-                    domains: config.domains,
+                    domains: domains,
                     email: config.contact_email,
                     notification: config.notification,
                 };
@@ -839,6 +856,14 @@ function createConfiguration() {
                 writeCertificate('snakeoil.crt');
                 writeCertificate('snakeoil.key');
             }
+        }
+        if (config.gitlab) {
+            writeConfigFile('gitlab.yml', config);
+            writeConfigFile('gitlab.conf', config);
+        }
+        if (config.wordpress) {
+            writeConfigFile('wordpress.yml', config);
+            writeConfigFile('wordpress.conf', config);
         }
         return true;
     } catch (err) {
@@ -899,7 +924,11 @@ function useConfigFolder() {
 }
 
 function writeConfigFile(name, config, mode) {
-    var path = getConfigFolder() + '/' + name;
+    var folder = getConfigFolder();
+    if (/\.conf$/.test(name)) {
+        folder += '/conf.d';
+    }
+    var path = folder + '/' + name;
     var templateName = _.replace(name, /^\./, '');
     var templatePath = __dirname + '/templates/' + templateName;
     if (dev) {

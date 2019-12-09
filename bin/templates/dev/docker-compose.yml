@@ -10,11 +10,17 @@ services:
       - media_server
       - event_notifier
       - www_handler
+<% if (gitlab) { %>
+      - gitlab
+<% } %>
+<% if (wordpress) { %>
+      - wordpress
+<% } %>
   postgres:                     # PostgreSQL database manager
     extends: { file: postgres.yml, service: postgres }
     ports:
       - 5432:5432
-  schema_manager:               # Database schema manager
+  schema_manager:               # Database schema manager (Node.js)
     extends:
       file: node.yml
       service: node
@@ -27,7 +33,7 @@ services:
     command: [ nodemon, --experimental-modules, schema-manager.mjs ]
     depends_on:
       - postgres
-  webdav_server:                # WebDAV server
+  webdav_server:                # WebDAV server (Node.js)
     extends: { file: node.yml, service: node }
     ports:
       - 8000:8000
@@ -98,6 +104,18 @@ services:
     command: [ nodemon, --experimental-modules, gitlab-adapter.mjs ]
     depends_on:
       - postgres
+<% if (gitlab) { %>
+  gitlab:                       # GitLab
+    extends: { file: gitlab.yml, service: gitlab }
+<% } %>
+<% if (wordpress) { %>
+  wordpress:                    # WordPress
+    extends: { file: wordpress.yml, service: wordpress }
+    depends_on:
+      - wordpress_db
+  wordpress_db:                 # MariaDB
+    extends: { file: wordpress.yml, service: wordpress_db }
+<% } %>
 <% if (volumes) { %>
 volumes:
   <% for (var i = 0; i < volumes.length; i++) { %>

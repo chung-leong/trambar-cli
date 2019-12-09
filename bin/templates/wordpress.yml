@@ -1,8 +1,6 @@
 version: "2"
 services:
   wordpress:
-    depends_on:
-      - wordpress_db
     image: wordpress:latest
     volumes:
       - ${WORDPRESS_HTML_FOLDER}:/var/www/html
