@@ -64,11 +64,19 @@ var optionDefinitions = [
         description: 'Specify config directory (default: ' + defaultConfigFolder + ')'
     },
     {
-        name: 'debug',
-        type: String,
-        description: 'Start service in debugger',
-        development: true,
+        name: 'dev',
+        alias: 'd',
+        type: Boolean,
+        description: 'Use development configuration',
     },
+/*
+    {
+        name: 'inspect',
+        alias: 'i',
+        type: Boolean,
+        description: 'Start service in debugger',
+    },
+*/
     {
         name: 'help',
         alias: 'h',
@@ -116,31 +124,18 @@ var scriptDescription = [
         ]
     },
     {
-        header: 'Options',
-        optionList: _.filter(optionDefinitions, function(def) {
-            return !def.defaultOption && !def.development;
-        })
-    },
-    {
         header: 'Certbot commands',
         content: [
             { name: 'add', summary: 'Add domain names' },
             { name: 'list', summary: 'List domain names' },
             { name: 'remove', summary: 'Remove domain names' },
+            { name: 'renew', summary: 'Renew certifcate' },
         ]
     },
     {
-        header: 'Development commands',
-        content: [
-            { name: 'config-dev', summary: 'Configure development server' },
-            { name: 'start-dev', summary: 'Start development server' },
-            { name: 'stop-dev', summary: 'Stop development server' },
-        ]
-    },
-    {
-        header: 'Development options',
+        header: 'Options',
         optionList: _.filter(optionDefinitions, function(def) {
-            return def.development;
+            return !def.defaultOption;
         })
     },
 ];
@@ -148,7 +143,6 @@ var scriptDescription = [
 var options = CommandLineArgs(optionDefinitions);
 var command = _.get(options, [ '*', 0 ]);
 var args = _.slice(_.get(options, '*'), 1);
-var dev = false;
 if (command) {
     if (!runCommand(command)) {
         process.exit(-1);
@@ -189,20 +183,13 @@ function runCommand(command) {
         case 'uninstall':
             return uninstall();
         case 'add':
-            return addDomainName();
+            return addDomainNames();
         case 'list':
             return listDomainNames();
         case 'remove':
-            return removeDomainName();
-        case 'start-dev':
-            dev = true;
-            return start();
-        case 'stop-dev':
-            dev = true;
-            return stop();
-        case 'config-dev':
-            dev = true;
-            return install();
+            return removeDomainNames();
+        case 'renew':
+            return renewDomainNames();
         default:
             console.log('Unknown command: ' + command);
             return false;
@@ -255,13 +242,8 @@ function install() {
     }
     var name = getScriptName();
     console.log('');
-    if (dev) {
-        console.log('Configuration complete');
-        console.log('Run "' + getScriptName() + ' start-dev" to start development server');
-    } else {
-        console.log('Installation complete');
-        console.log('Run "' + name + ' start" to start Trambar');
-    }
+    console.log('Installation complete');
+    console.log('Run "' + name + ' start" to start Trambar');
     return true;
 }
 
@@ -680,10 +662,9 @@ function checkFileExistence(path) {
     return true;
 }
 
-function getProcesses(regExp) {
-    if (!regExp) {
-        regExp = new RegExp('^' + prefix + '_');
-    }
+function getProcesses() {
+    var prefix = getContainerPrefix();
+    var regExp = new RegExp('^' + prefix + '_');
     var cmd = 'docker';
     var args = [ 'ps', '--format={ "Image": {{json .Image}}, "Names": {{json .Names}}, "ID": {{json .ID }} }' ];
     try {
@@ -739,17 +720,17 @@ function removeImage(id) {
 
 function createConfiguration() {
     try {
-        var pub = (dev) ? false : isPublicServer();
+        var pub = (options.dev) ? false : isPublicServer();
         var config = {
-            dev: dev,
+            dev: options.dev,
             ssl: (pub) ? true : false,
             certbot: (pub) ? true : false,
             snakeoil: (pub) ? false : true,
             domains: [],
             contact_email: '',
             notification: true,
-            http_port: (pub || dev) ? 80 : 8080,
-            https_port: (pub || dev) ? 443 : 8443,
+            http_port: (pub || options.dev) ? 80 : 8080,
+            https_port: (pub || options.dev) ? 443 : 8443,
             cert_path: '',
             key_path: '',
             ssl_folder: '',
@@ -759,7 +740,7 @@ function createConfiguration() {
             build: getTrambarBuild(),
             password: createRandomPasswords(6),
             root_password: defaultPassword,
-            restart: (dev) ? 'no' : 'always',
+            restart: (options.dev) ? 'no' : 'always',
 
             gitlab: false,
             gitlab_domains: [],
@@ -771,36 +752,37 @@ function createConfiguration() {
             wordpress_root_folder: '',
             wordpress_data_folder: '',
         };
-        if (!dev) {
-            config.ssl = confirm('Set up SSL?', config.ssl);
-        }
-        if (dev) {
+        if (options.dev) {
             config.source_folder = promptForText('Trambar git working folder:', config.source_folder);
         }
+        config.ssl = confirm('Set up SSL?', config.ssl);
         if (config.ssl) {
             config.certbot = confirm('Use certbot (https://certbot.eff.org/)?', config.certbot);
             if (config.certbot) {
                 config.domains = promptForDomains('Server domain names:', config.domains);
                 config.contact_email = promptForText('Contact e-mail:');
                 config.notification = confirm('Receive notification e-mails from EFF?', config.notification);
-                config.ssl_folder = './certbot';
+                config.cert_path = getCertbotCertifcatePath(config.domains, 'fullchain.pem');
+                config.key_path = getCertbotCertifcatePath(config.domains, 'privkey.pem');
+                config.ssl_folder = getCertbotFolder();
                 config.snakeoil = false;
             } else {
                 config.snakeoil = confirm('Use self-signed SSL certificate?', config.snakeoil);
                 config.domains = promptForDomains('Server domain names:', []);
                 if (config.snakeoil) {
-                    config.cert_path = getCertificatePath('snakeoil.crt');
-                    config.key_path = getCertificatePath('snakeoil.key');
+                    config.cert_path = getSnakeoilCertificatePath('snakeoil.crt');
+                    config.key_path = getSnakeoilCertificatePath('snakeoil.key');
+                    config.ssl_folder = getSnakeoilFolder();
                 } else {
                     config.cert_path = promptForPath('Full path of certificate:');
                     config.key_path = promptForPath('Full path of private key:');
+                    config.ssl_folder = CommonDir([
+                        config.cert_path,
+                        config.key_path,
+                        FS.realpathSync(config.cert_path),
+                        FS.realpathSync(config.key_path),
+                    ]);
                 }
-                config.ssl_folder = CommonDir([
-                    config.cert_path,
-                    config.key_path,
-                    FS.realpathSync(config.cert_path),
-                    FS.realpathSync(config.key_path),
-                ]);
                 if (/^\/[^\/]+$/.test(config.ssl_folder)) {
                     console.error('Certificate location requires mounting of root level folder');
                     process.exit(-1);
@@ -851,10 +833,9 @@ function createConfiguration() {
                     notification: config.notification,
                 };
                 writeCertbotConfig(certbot);
-                requestCertbotCerts(certbot);
             } else if (config.snakeoil) {
-                writeCertificate('snakeoil.crt');
-                writeCertificate('snakeoil.key');
+                writeSnakeoilCertificate('snakeoil.crt');
+                writeSnakeoilCertificate('snakeoil.key');
             }
         }
         if (config.gitlab) {
@@ -865,6 +846,9 @@ function createConfiguration() {
             writeConfigFile('wordpress.yml', config);
             writeConfigFile('wordpress.conf', config);
         }
+        if (config.certbot) {
+            requestCertbotCerts(certbot);
+        }
         return true;
     } catch (err) {
         console.error(err);
@@ -873,10 +857,13 @@ function createConfiguration() {
 }
 
 function getContainerPrefix() {
-    if (dev) {
+    if (options.prefix) {
+        return options.prefix;
+    }
+    if (options.dev) {
         return 'dev';
     }
-    return options.prefix || defaultPrefix;
+    return  defaultPrefix;
 }
 
 function getTrambarBuild() {
@@ -884,15 +871,30 @@ function getTrambarBuild() {
 }
 
 function getConfigFolder() {
-    var folder = options.config || defaultConfigFolder;
-    if (dev) {
-        folder += '/dev';
+    var folder = options.config;
+    if (!folder) {
+        folder = defaultConfigFolder;
+        if (options.dev) {
+            folder += '/dev';
+        }
     }
     return folder;
 }
 
-function getCertificatePath(filename) {
-    return getConfigFolder() + '/certs/' + filename;
+function getSnakeoilFolder(filename) {
+    return getConfigFolder() + '/certs';
+}
+
+function getSnakeoilCertificatePath(filename) {
+    return getSnakeoilFolder() + '/' + filename;
+}
+
+function getCertbotFolder() {
+    return '/etc/letsencrypt';
+}
+
+function getCertbotCertifcatePath(domains, filename) {
+    return getCertbotFolder() + '/' + domains[0] + '/' + filename;
 }
 
 var virtualVolumes;
@@ -931,7 +933,7 @@ function writeConfigFile(name, config, mode) {
     var path = folder + '/' + name;
     var templateName = _.replace(name, /^\./, '');
     var templatePath = __dirname + '/templates/' + templateName;
-    if (dev) {
+    if (options.dev) {
         var altTemplatePath = __dirname + '/templates/dev/' + templateName;
         if (FS.existsSync(altTemplatePath)) {
             templatePath = altTemplatePath;
@@ -949,8 +951,8 @@ function writeConfigFile(name, config, mode) {
     return writeFile(path, text, mode);
 }
 
-function writeCertificate(name, mode) {
-    var path = getCertificatePath(name);
+function writeSnakeoilCertificate(name, mode) {
+    var path = getSnakeoilCertificatePath(name);
     var sourcePath = __dirname + '/certs/' + name;
     var text = FS.readFileSync(sourcePath, 'utf-8');
     return writeFile(path, text, mode);
@@ -1082,7 +1084,7 @@ function isPublicServer() {
 function createRandomPasswords(count) {
     var list = [];
     for (var i = 0; i < count; i++) {
-        if (dev) {
+        if (options.dev) {
             list.push('qwerty');
         } else {
             list.push(Crypto.randomBytes(16).toString('hex'));
@@ -1091,7 +1093,7 @@ function createRandomPasswords(count) {
     return list;
 }
 
-function addDomainName() {
+function addDomainNames() {
     if (!checkRootAccess()) {
         return false;
     }
@@ -1109,7 +1111,7 @@ function addDomainName() {
     return true;
 }
 
-function removeDomainName() {
+function removeDomainNames() {
     if (!checkRootAccess()) {
         return false;
     }
@@ -1121,6 +1123,14 @@ function removeDomainName() {
     config.domains = _.difference(config.domains, names);
     writeCertbotConfig(config);
     requestCertbotCerts(config);
+    return true;
+}
+
+function renewDomainNames() {
+    if (!checkRootAccess()) {
+        return false;
+    }
+    renewCertbotCerts();
     return true;
 }
 
@@ -1149,17 +1159,6 @@ function writeCertbotConfig(config) {
 
 function requestCertbotCerts(config) {
     var args = [];
-    // docker arguments
-    args.push('run', '--rm');
-    if (findNginx()) {
-        args.push('--network', prefix + '_default');
-    } else {
-        args.push('--expose', 80);
-    }
-    args.push('--name', 'certbot');
-    args.push('certbot/certbot');
-
-    // certbot command
     args.push('certonly', '--standalone');
     args.push('--preferred-challenges', 'http');
     _.each(config.domains, function(name) {
@@ -1172,14 +1171,84 @@ function requestCertbotCerts(config) {
     } else {
         args.push('--no-eff-email');
     }
+    return runCertbot(args);
+}
+
+function renewCertbotCerts() {
+    var args = [];
+    args.push('renew');
+    args.push('--preferred-challenges', 'http');
+    var etcFolder = getCertbotFolder();
+    var mtimeBefore = getModifiedTime(etcFolder);
+    if (!runCertbot(args)) {
+        return false;
+    }
+    var mtimeAfter = getModifiedTime(etcFolder);
+    if (mtimeAfter > mtimeBefore) {
+        reloadNginx();
+    }
+    return true;
+}
+
+function runCertbot(cargs) {
+    var args = [];
+    args.push('run', '--rm');
+    if (findNginx()) {
+        var prefix = getContainerPrefix();
+        args.push('--network', prefix + '_default');
+    } else {
+        args.push('--expose', 80);
+    }
+    args.push('--name', 'certbot');
+    args.push('certbot/certbot');
+    var etcFolder = getCertbotFolder();
+    args.push('--volume', etcFolder + ':/etc/letsencrypt');
+    if (!virtualization) {
+        var varFolder = getDataFolder('letsencrypt');
+        args.push('--volume', varFolder + ':/var/lib/letsencrypt');
+    }
+
+    for (var i = 0; i < cargs.length; i++) {
+        args.push(cargs[i]);
+    }
     return run('docker', args);
 }
 
 function findNginx() {
     var processes = getProcesses();
-    return _.some(processes, function(process) {
-        return /^nginx/.test(process.Image);
+    var process = _.find(processes, function(process) {
+        return /nginx/.test(process.Names);
     });
+    if (process) {
+        return process.Names;
+    }
+}
+
+function reloadNginx() {
+    var nginx = findNginx();
+    if (!nginx) {
+        return false;
+    }
+    var args = [];
+    args.push('exec', nginx);
+    args.push('service', 'nginx', 'reload');
+    return run('docker', args);
+}
+
+function getModifiedTime(path) {
+    var stat = FS.statSync(path);
+    var mtime = stat.mtime;
+    if (stat.isDirectory()) {
+        var items = FS.readdirSync(path);
+        for (var i = 0; i < items.length; i++) {
+            var ipath = path + '/' + items[i];
+            var itime = getModifiedTime(ipath);
+            if (itime > mtime) {
+                mtime = itime;
+            }
+        }
+    }
+    return mtime;
 }
 
 function filterBlankLines(text) {
