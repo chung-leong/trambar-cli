@@ -4,6 +4,9 @@ volumes:
 services:
   nginx:                        # Nginx web server
     extends: { file: nginx.yml, service: nginx }
+    volumes:
+      - web_cache:/var/cache/nginx
+      - ${TRAMBAR_MEDIA_FOLDER}:/var/cache/media:z
     depends_on:
       - data_server
       - admin_data_server
@@ -118,9 +121,8 @@ services:
     ports:
       - 3306:3306
 <% } %>
-<% if (volumes) { %>
 volumes:
+  web_cache: {}
   <% for (var i = 0; i < volumes.length; i++) { %>
   <%= volumes[i] %>: {}
   <% } %>
-<% } %>

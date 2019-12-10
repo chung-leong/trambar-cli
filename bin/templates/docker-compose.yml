@@ -4,6 +4,9 @@ volumes:
 services:
   nginx:                        # Nginx web server
     extends: { file: nginx.yml, service: nginx }
+    volumes:
+      - web_cache:/var/cache/nginx
+      - ${TRAMBAR_MEDIA_FOLDER}:/var/cache/media:z
     depends_on:
       - data_server
       - admin_data_server
@@ -29,6 +32,13 @@ services:
     depends_on:
       - postgres
     command: [ node, --experimental-modules, schema-manager.js ]
+  www_handler:                  # Web page handler (Node.js)
+    extends: { file: node.yml, service: node }
+    volumes:
+      - web_cache:/var/cache/nginx
+    command: [ node, --experimental-modules, www-handler.mjs ]
+    depends_on:
+      - postgres
   data_server:                  # Data server (Node.js)
     extends: { file: node.yml, service: node }
     depends_on:
@@ -95,9 +105,8 @@ services:
   wordpress_db:                 # MariaDB
     extends: { file: wordpress.yml, service: wordpress_db }
 <% } %>
-<% if (volumes) { %>
 volumes:
+  web_cache: {}
   <% for (var i = 0; i < volumes.length; i++) { %>
   <%= volumes[i] %>: {}
   <% } %>
-<% } %>
