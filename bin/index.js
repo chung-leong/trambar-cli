@@ -19,6 +19,7 @@ var defaultBuild = 'latest';
 var defaultConfigFolder;
 var defaultSourceFolder;
 var virtualization;
+var cronAvailable;
 
 switch (OS.type()) {
     case 'Linux':
@@ -26,18 +27,21 @@ switch (OS.type()) {
         defaultConfigFolder = '/etc/trambar';
         defaultSourceFolder = home + '/trambar';
         virtualization = false;
+        cronAvailable = FS.existsSync('/etc/cron.d');
         break;
     case 'Windows_NT':
         var home = _.replace(process.env.USERPROFILE, /\\/g, '/');
         defaultConfigFolder = home + '/Trambar';
         defaultSourceFolder = home + '/trambar';
         virtualization = true;
+        cronAvailable = false;
         break;
     case 'Darwin':
         var home = process.env.HOME;
         defaultConfigFolder = home + '/Trambar';
         defaultSourceFolder = home + '/trambar';
         virtualization = true;
+        cronAvailable = false;
         break;
     default:
         console.log('Unsupported operation system', OS.type());
@@ -130,6 +134,7 @@ var scriptDescription = [
             { name: 'list', summary: 'List domain names' },
             { name: 'remove', summary: 'Remove domain names' },
             { name: 'renew', summary: 'Renew certifcate' },
+            { name: 'request', summary: 'Request new certificate' },
         ]
     },
     {
@@ -189,7 +194,9 @@ function runCommand(command) {
         case 'remove':
             return removeDomainNames();
         case 'renew':
-            return renewDomainNames();
+            return renewCertificate();
+        case 'request':
+            return requestCertificate();
         default:
             console.log('Unknown command: ' + command);
             return false;
@@ -847,7 +854,14 @@ function createConfiguration() {
             writeConfigFile('wordpress.conf', config);
         }
         if (config.certbot) {
-            requestCertbotCerts(certbot);
+            if (confirm('Acquire SSL certificate through certbot now?', true)) {
+                requestCertificate();
+            }
+            if (cronAvailable) {
+                if (confirm('Add crontab for renewing SSL certificate?', true)) {
+                    addRenewalCrontab();
+                }
+            }
         }
         return true;
     } catch (err) {
@@ -1107,7 +1121,7 @@ function addDomainNames() {
     }
     config.domains = _.union(config.domains, names);
     writeCertbotConfig(config);
-    requestCertbotCerts(config);
+    acquireCertbotCertificate(config);
     return true;
 }
 
@@ -1122,11 +1136,23 @@ function removeDomainNames() {
     var names = promptForDomains('Domains to remove:', args);
     config.domains = _.difference(config.domains, names);
     writeCertbotConfig(config);
-    requestCertbotCerts(config);
+    acquireCertbotCertificate(config);
     return true;
 }
 
-function renewDomainNames() {
+function requestCertificate() {
+    if (!checkRootAccess()) {
+        return false;
+    }
+    var config = loadCertbotConfig();
+    if (!config) {
+        return false;
+    }
+    acquireCertbotCertificate(config);
+    return true;
+}
+
+function renewCertificate() {
     if (!checkRootAccess()) {
         return false;
     }
@@ -1145,7 +1171,8 @@ function listDomainNames() {
 
 function loadCertbotConfig() {
     try {
-        var text = FS.readFileSync('./certbot.json', 'utf8');
+        var path = getConfigFolder() + '/certbot.json';
+        var text = FS.readFileSync(path, 'utf8');
         return JSON.parse(text);
     } catch (err) {
     }
@@ -1153,11 +1180,12 @@ function loadCertbotConfig() {
 }
 
 function writeCertbotConfig(config) {
+    var path = getConfigFolder() + '/certbot.json';
     var text = JSON.stringify(config, undefined, 2) + '\n';
-    FS.writeFileSync('./certbot.json', text);
+    FS.writeFileSync(path, text);
 }
 
-function requestCertbotCerts(config) {
+function acquireCertbotCertificate(config) {
     var args = [];
     args.push('certonly', '--standalone');
     args.push('--preferred-challenges', 'http');
@@ -1200,13 +1228,13 @@ function runCertbot(cargs) {
         args.push('--expose', 80);
     }
     args.push('--name', 'certbot');
-    args.push('certbot/certbot');
     var etcFolder = getCertbotFolder();
     args.push('--volume', etcFolder + ':/etc/letsencrypt');
     if (!virtualization) {
         var varFolder = getDataFolder('letsencrypt');
         args.push('--volume', varFolder + ':/var/lib/letsencrypt');
     }
+    args.push('certbot/certbot');
 
     for (var i = 0; i < cargs.length; i++) {
         args.push(cargs[i]);
@@ -1235,6 +1263,31 @@ function reloadNginx() {
     return run('docker', args);
 }
 
+function addRenewalCrontab() {
+    var path = '/etc/cron.d/trambar-certbot-renewal';
+    var args = [];
+    if (options.config) {
+        args.push('-c', options.config);
+    }
+    if (options.prefix) {
+        args.push('-p', options.prefix);
+    }
+    if (options.dev) {
+        args.push('-d');
+    }
+    args.push('renew');
+    var cmd = 'trambar ' + args.join(' ');
+    var lines = [
+        'SHELL=' + process.env.SHELL,
+        'PATH=' + removeHome(process.env.PATH, process.env.HOME),
+        '',
+        '33 3 * * * ' + cmd + ' >/dev/null 2>&1'
+    ];
+    var text = lines.join('\n') + '\n';
+    FS.writeFileSync(path, text);
+    return true;
+}
+
 function getModifiedTime(path) {
     var stat = FS.statSync(path);
     var mtime = stat.mtime;
@@ -1255,5 +1308,15 @@ function filterBlankLines(text) {
     var lines = _.filter(_.split(text, '\n'), function(line) {
         return _.trim(line);
     });
-    return lines.join('\n');
+    return lines.join('\n') + '\n';
+}
+
+function removeHome(path, home) {
+    var folders = _.filter(_.split(path, ':'), function(folder) {
+        if (_.startsWith(folder, home)) {
+            return false;
+        }
+        return true;
+    });
+    return folders.join(':');
 }
