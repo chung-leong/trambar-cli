@@ -247,6 +247,13 @@ function install() {
     if (!pullImages()) {
         return false;
     }
+    var config = loadCertbotConfig();
+    if (config) {
+        if (confirm('Acquire SSL certificate through certbot now?', true)) {
+            acquireCertbotCertificate(config);
+        }
+    }
+
     var name = getScriptName();
     console.log('');
     console.log('Installation complete');
@@ -854,9 +861,6 @@ function createConfiguration() {
             writeConfigFile('wordpress.conf', config);
         }
         if (config.certbot) {
-            if (confirm('Acquire SSL certificate through certbot now?', true)) {
-                requestCertificate();
-            }
             if (cronAvailable) {
                 if (confirm('Add crontab for renewing SSL certificate?', true)) {
                     addRenewalCrontab();
@@ -1121,7 +1125,7 @@ function addDomainNames() {
     }
     config.domains = _.union(config.domains, names);
     writeCertbotConfig(config);
-    acquireCertbotCertificate(config);
+    acquireCertbotCertificate(config, true);
     return true;
 }
 
@@ -1136,7 +1140,7 @@ function removeDomainNames() {
     var names = promptForDomains('Domains to remove:', args);
     config.domains = _.difference(config.domains, names);
     writeCertbotConfig(config);
-    acquireCertbotCertificate(config);
+    acquireCertbotCertificate(config, true);
     return true;
 }
 
@@ -1185,10 +1189,13 @@ function writeCertbotConfig(config) {
     FS.writeFileSync(path, text);
 }
 
-function acquireCertbotCertificate(config) {
+function acquireCertbotCertificate(config, expand) {
     var args = [];
     args.push('certonly', '--standalone');
     args.push('--preferred-challenges', 'http');
+    if (expand) {
+        args.push('--expand');
+    }
     _.each(config.domains, function(name) {
         args.push('-d', name);
     });
@@ -1225,7 +1232,7 @@ function runCertbot(cargs) {
         var prefix = getContainerPrefix();
         args.push('--network', prefix + '_default');
     } else {
-        args.push('--expose', 80);
+        args.push('--publish', '80:80');
     }
     args.push('--name', 'certbot');
     var etcFolder = getCertbotFolder();
