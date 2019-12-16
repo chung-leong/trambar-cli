@@ -868,6 +868,11 @@ function createConfiguration() {
                 }
             }
         }
+        if (config.dev) {
+            if (config.gitlab || config.wordpress) {
+                writeConfigFile('docker-compose.override.yml', config);
+            }
+        }
         return true;
     } catch (err) {
         console.error(err);

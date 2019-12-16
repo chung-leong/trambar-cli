@@ -1,0 +1,20 @@
+version: "2"
+services:
+<% if (gitlab) { %>
+  gitlab:
+    networks:
+      default:
+        aliases:
+  <% for(var i = 0; i < gitlab_domains.length; i++) { %>
+          - <%= gitlab_domains[i] %>
+  <% } %>
+<% } %>
+<% if (wordpress) { %>
+  wordpress:
+    networks:
+      default:
+        aliases:
+  <% for(var i = 0; i < wordpress_domains.length; i++) { %>
+          - <%= wordpress_domains[i] %>
+  <% } %>
+<% } %>
