@@ -19,6 +19,7 @@ var defaultBuild = 'latest';
 var defaultConfigFolder;
 var defaultSourceFolder;
 var virtualization;
+var virtualVolumes = [];
 var cronAvailable;
 
 switch (OS.type()) {
@@ -915,8 +916,6 @@ function getCertbotCertifcatePath(domains, filename) {
     return getCertbotFolder() + '/' + domains[0] + '/' + filename;
 }
 
-var virtualVolumes;
-
 function getDataFolder(path) {
     if (virtualization) {
         var name = _.replace(path, /\//g, '_');
@@ -933,9 +932,7 @@ function getDataFolder(path) {
 }
 
 function getVirtualVolumes() {
-    if (virtualVolumes) {
-        return virtualVolumes;
-    }
+    return virtualVolumes;
 }
 
 function useConfigFolder() {

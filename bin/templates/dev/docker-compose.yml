@@ -123,6 +123,6 @@ services:
 <% } %>
 volumes:
   web_cache: {}
-  <% for (var i = 0; i < volumes.length; i++) { %>
+<% for (var i = 0; i < volumes.length; i++) { %>
   <%= volumes[i] %>: {}
-  <% } %>
+<% } %>
