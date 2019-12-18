@@ -4,9 +4,32 @@ services:
     image: gitlab/gitlab-ce:latest
     environment:
       GITLAB_OMNIBUS_CONFIG: |
-        external_url "${GITLAB_EXTERNAL_URL}"
+        external_url '${GITLAB_EXTERNAL_URL}'
+        gitlab_rails['time_zone'] = '${GITLAB_TIMEZONE}'
+        gitlab_rails['smtp_enable'] = ${GITLAB_SMTP_ENABLE}
+        gitlab_rails['smtp_address'] = '${GITLAB_SMTP_ADDRESS}'
+        gitlab_rails['smtp_port'] = ${GITLAB_SMTP_PORT}
+        gitlab_rails['smtp_user_name'] = '${GITLAB_SMTP_USER}'
+        gitlab_rails['smtp_password'] = '${GITLAB_SMTP_PASSWORD}'
+        gitlab_rails['smtp_domain'] = '${GITLAB_SMTP_DOMAIN}'
+        gitlab_rails['smtp_authentication'] = 'login'
+        gitlab_rails['smtp_enable_starttls_auto'] = true
+        gitlab_rails['smtp_openssl_verify_mode'] = 'peer'
+        gitlab_rails['gitlab_email_from'] = '${GITLAB_SMTP_EMAIL_FROM}'
+        gitlab_rails['backup_keep_time'] = 14515200
+        logging['logrotate_frequency'] = 'weekly'
+        logging['logrotate_rotate'] = 6
+        logging['logrotate_compress'] = 'compress'
+        logging['logrotate_method'] = 'copytruncate'
+        logging['logrotate_delaycompress'] = 'delaycompress'
         nginx['listen_port'] = 80
         nginx['listen_https'] = false
+        nginx['redirect_http_to_https'] = <%= ssl %>
+        nginx['logrotate_frequency'] = 'weekly'
+        nginx['logrotate_rotate'] = 6
+        nginx['logrotate_compress'] = 'compress'
+        nginx['logrotate_method'] = 'copytruncate'
+        nginx['logrotate_delaycompress'] = 'delaycompress'
     ports:
       - 22:22
     volumes:

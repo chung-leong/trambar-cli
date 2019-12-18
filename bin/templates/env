@@ -22,6 +22,14 @@ GITLAB_CONFIG_FOLDER=<%= gitlab_config_folder %>
 GITLAB_DATA_FOLDER=<%= gitlab_data_folder %>
 GITLAB_LOG_FOLDER=<%= gitlab_log_folder %>
 GITLAB_EXTERNAL_URL=<%= gitlab_external_url %>
+GITLAB_TIMEZONE=<%= timezone %>
+GITLAB_SMTP_ENABLE=<%= gitlab_smtp %>
+GITLAB_SMTP_ADDRESS=<%= gitlab_smtp_address %>
+GITLAB_SMTP_PORT=<%= gitlab_smtp_port %>
+GITLAB_SMTP_USER=<%= gitlab_smtp_user %>
+GITLAB_SMTP_PASSWORD=<%= gitlab_smtp_password %>
+GITLAB_SMTP_DOMAIN=<%= gitlab_smtp_domain %>
+GITLAB_SMTP_EMAIL_FROM=<%= gitlab_smtp_email_from %>
 <% } %>
 <% if (wordpress) { %>
 WORDPRESS_DATABASE_NAME=wordpress

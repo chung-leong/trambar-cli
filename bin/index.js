@@ -756,11 +756,19 @@ function createConfiguration() {
             password: createRandomPasswords(6),
             root_password: defaultPassword,
             restart: (options.dev) ? 'no' : 'always',
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
 
             gitlab: false,
             gitlab_domains: [],
             gitlab_root_folder: '',
             gitlab_external_url: '',
+            gitlab_smtp: false,
+            gitlab_smtp_address: '',
+            gitlab_smtp_port: 587,
+            gitlab_smtp_user: '',
+            gitlab_smtp_password: '',
+            gitlab_smtp_domain: '',
+            gitlab_smtp_email_from: '',
 
             wordpress: false,
             wordpress_domains: [],
@@ -783,7 +791,7 @@ function createConfiguration() {
                 config.snakeoil = false;
             } else {
                 config.snakeoil = confirm('Use self-signed SSL certificate?', config.snakeoil);
-                config.domains = promptForDomains('Server domain names:', []);
+                config.domains = promptForDomains('Server domain names:', config.domains);
                 if (config.snakeoil) {
                     config.cert_path = getSnakeoilCertificatePath('snakeoil.crt');
                     config.key_path = getSnakeoilCertificatePath('snakeoil.key');
@@ -804,6 +812,10 @@ function createConfiguration() {
                 }
             }
             config.https_port = promptForPort('HTTPS port:', config.https_port);
+        } else {
+            if (config.dev) {
+                config.domains = promptForDomains('Server domain names:', config.domains);
+            }
         }
         config.http_port = promptForPort('HTTP port:', config.http_port);
         config.root_password = promptForPassword('Password for Trambar root account:', config.root_password);
@@ -822,6 +834,16 @@ function createConfiguration() {
             config.gitlab_config_folder = getDataFolder('gitlab/config');
             config.gitlab_data_folder = getDataFolder('gitlab/data');
             config.gitlab_log_folder = getDataFolder('gitlab/logs');
+
+            config.gitlab_smtp = confirm('Set up e-mail notification?', config.gitlab_smtp);
+            if (config.gitlab_smtp) {
+                config.gitlab_smtp_address = promptForText('SMTP server:', config.gitlab_smtp_address);
+                config.gitlab_smtp_port = promptForPort('SMTP port:', config.gitlab_smtp_port);
+                config.gitlab_smtp_user = promptForText('User name:', config.gitlab_smtp_user);
+                config.gitlab_smtp_password = promptForText('Password:', config.gitlab_smtp_password);
+                config.gitlab_smtp_domain = promptForText('E-mail domain:', config.gitlab_smtp_domain);
+                config.gitlab_smtp_email_from = promptForText('From address:', config.gitlab_smtp_email_from);
+            }
         }
         config.wordpress = confirm('Install WordPress?', config.wordpress);
         if (config.wordpress) {
@@ -830,6 +852,7 @@ function createConfiguration() {
             config.wordpress_html_folder = getDataFolder('wordpress/html');
         }
         config.volumes = getVirtualVolumes();
+        config.all_domains = _.union(config.domains, config.gitlab_domains, config.wordpress_domains);
 
         writeConfigFile('docker-compose.yml', config);
         writeConfigFile('nginx.yml', config);
@@ -869,9 +892,7 @@ function createConfiguration() {
             }
         }
         if (config.dev) {
-            if (config.gitlab || config.wordpress) {
-                writeConfigFile('docker-compose.override.yml', config);
-            }
+            writeConfigFile('docker-compose.override.yml', config);
         }
         return true;
     } catch (err) {
