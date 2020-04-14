@@ -101,6 +101,8 @@ services:
       - postgres
   gitlab_adapter:               # GitLab Adapter (Node.js)
     extends: { file: node.yml, service: node }
+    volumes:
+      - ${TRAMBAR_GENERIC_TEMPLATE_FOLDER}:/opt/trambar/backend/src/templates/website
     environment:
       - POSTGRES_USER=admin_role
       - POSTGRES_PASSWORD=${TRAMBAR_DATABASE_ADMIN_PASSWORD}

@@ -16,12 +16,14 @@ TRAMBAR_SSL_FOLDER=<%= ssl_folder %>
 <% } %>
 <% if (dev) { %>
 TRAMBAR_SOURCE_FOLDER=<%= source_folder %>
+TRAMBAR_GENERIC_TEMPLATE_FOLDER=<%= template_folder %>
 <% } %>
 <% if (gitlab) { %>
 GITLAB_CONFIG_FOLDER=<%= gitlab_config_folder %>
 GITLAB_DATA_FOLDER=<%= gitlab_data_folder %>
 GITLAB_LOG_FOLDER=<%= gitlab_log_folder %>
 GITLAB_EXTERNAL_URL=<%= gitlab_external_url %>
+GITLAB_SSH_PORT=<%= gitlab_ssh_port %>
 GITLAB_TIMEZONE=<%= timezone %>
 GITLAB_SMTP_ENABLE=<%= gitlab_smtp %>
 GITLAB_SMTP_ADDRESS=<%= gitlab_smtp_address %>

@@ -7,7 +7,7 @@ services:
       - ${TRAMBAR_SOURCE_FOLDER}/backend/src:/opt/trambar/backend/src
       - ${TRAMBAR_SOURCE_FOLDER}/backend/media:/opt/trambar/backend/media
       - ${TRAMBAR_SOURCE_FOLDER}/client/www:/opt/trambar/client/www
-      - ${TRAMBAR_SOURCE_FOLDER}/common/src:/opt/trambar/backend/src/lib/common
+      - ${TRAMBAR_SOURCE_FOLDER}/localization/src:/opt/trambar/backend/src/lib/localization
     environment:
       - NODE_ENV=development
       - POSTGRES_HOST=postgres

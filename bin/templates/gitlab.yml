@@ -31,7 +31,7 @@ services:
         nginx['logrotate_method'] = 'copytruncate'
         nginx['logrotate_delaycompress'] = 'delaycompress'
     ports:
-      - 22:22
+      - ${GITLAB_SSH_PORT}:22
     volumes:
       - ${GITLAB_CONFIG_FOLDER}:/etc/gitlab
       - ${GITLAB_DATA_FOLDER}:/var/opt/gitlab
